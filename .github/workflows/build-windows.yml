@@ -1,0 +1,76 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests
+        run: |
+          python -m pytest -q
+          python -m compileall -q hermes_insu app.py run_local.py build_exe.py tests
+
+      - name: Test frontend
+        working-directory: frontend
+        run: |
+          npm test -- --run
+          npm run build
+
+      - name: Build Windows distribution
+        run: python build_exe.py
+
+      - name: Smoke test EXE
+        shell: pwsh
+        run: |
+          $env:HERMES_INSU_PORT = "5099"
+          $exe = Join-Path (Get-Location) "dist/모두의인수인계/모두의인수인계.exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:5099/api/health" -UseBasicParsing
+            if ($response.StatusCode -ne 200) { throw "Health check failed" }
+          } finally {
+            if ($proc -and !$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+
+      - name: Zip distribution
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/모두의인수인계" -DestinationPath "modoo-insu-windows.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: modoo-insu-windows
+          path: modoo-insu-windows.zip

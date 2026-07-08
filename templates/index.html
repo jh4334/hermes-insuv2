@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>모두의 인수인계 · 공문 기반 캘린더</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero card">
+      <p class="eyebrow">모두의 인수인계 · 로컬-first 업무 준비 도구</p>
+      <h1>공문 PDF를 업무 카드와 캘린더 흐름으로 바꾸는 준비판</h1>
+      <p class="lead">정식 화면은 번들된 React 프론트엔드에서 실행됩니다. 원본 PDF는 앱 DB/영구 저장소에 저장하지 않고, 문서번호 + 기안일 + 참고자료 위치 중심으로 올해 업무 실행판을 준비합니다.</p>
+      <div class="principles">
+        <span>PDF 업로드</span>
+        <span>캘린더</span>
+        <span>업무목록</span>
+        <span>내보내기</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>프론트엔드 빌드가 필요합니다</h2>
+      <p class="hint">배포용 실행 파일에서는 새 프론트엔드가 열립니다. 개발 환경에서 이 화면이 보이면 frontend/dist가 아직 없거나, 정적 프론트엔드가 연결되지 않은 상태입니다.</p>
+      <ul class="hint">
+        <li>최종 사용자는 압축을 풀고 모두의인수인계.exe만 더블클릭하면 됩니다.</li>
+        <li>업무 입력은 PDF 업로드 흐름을 기준으로 하며, PDF 업로드 → 추출 결과 확인 → 캘린더/업무목록 확인 순서로 진행합니다.</li>
+        <li>내보내기에서는 로컬 백업, 업무묶음 DOCX, 업무묶음 Markdown을 사용할 수 있습니다.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

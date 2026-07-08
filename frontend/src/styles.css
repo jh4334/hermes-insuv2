@@ -1,0 +1,112 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * 모두의 인수인계 — team-handoff-hub Warm Paper frontend.
+ * 공문·달력·포스트잇 흐름에 맞춘 따뜻한 크림 종이형 디자인 시스템.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-display: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-ember: var(--ember);
+  --color-ember-foreground: var(--ember-foreground);
+  --color-ember-soft: var(--ember-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+}
+
+:root {
+  --radius: 0.375rem;
+  --background: #f4ede3;
+  --foreground: #2b1d18;
+  --surface: #fffaf3;
+  --surface-elevated: #ffffff;
+  --muted: #eadfce;
+  --muted-foreground: #6f6258;
+  --ember: #9a0002;
+  --ember-foreground: #fffaf3;
+  --ember-soft: rgb(154 0 2 / 0.08);
+  --destructive: #b42318;
+  --destructive-foreground: #fffaf3;
+  --border: #d8c9b8;
+  --border-strong: #bba895;
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(800%); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@utility animate-scan {
+  animation: scan-line 3s linear infinite;
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  button, input, textarea, select { font: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--color-background); }
+  ::-webkit-scrollbar-thumb { background: var(--color-surface); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+  ::selection { background: color-mix(in oklab, var(--color-ember) 30%, transparent); }
+  .presentation-mode {
+    font-size: 1.08rem;
+  }
+  .presentation-mode main {
+    line-height: 1.65;
+  }
+  .presentation-mode h2 {
+    font-size: clamp(2.1rem, 3vw, 3rem);
+  }
+  .presentation-mode h3 {
+    font-size: clamp(1.35rem, 2vw, 2rem);
+  }
+  .presentation-mode table,
+  .presentation-mode input,
+  .presentation-mode select,
+  .presentation-mode textarea,
+  .presentation-mode button {
+    font-size: 1.05em;
+  }
+}
