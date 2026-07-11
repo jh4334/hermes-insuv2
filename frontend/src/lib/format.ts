@@ -68,7 +68,7 @@ export function pdfExtractionSummaryMessage(taskCount: number, extractedFiles: r
   if (textlessFiles.length === extractedFiles.length && textlessFiles.length > 0) {
     return `${taskCount}개 후보 추출 완료 · 스캔 PDF이거나 텍스트가 없는 파일이에요 · 직접 입력하기를 사용할 수 있어요`;
   }
-  return `${taskCount}개 후보 추출 완료 · 업무묶음 이름을 정한 뒤 달력에 추가하세요`;
+  return `${taskCount}개 후보 추출 완료 · 자동 분류 제안을 확인한 뒤 추가하세요`;
 }
 
 export function cardsToTasks(cards: AnalysisCard[]): PreviewTaskInput[] {
@@ -171,7 +171,7 @@ export function buildWorkflowSummaries(tasks: Task[]): WorkflowSummary[] {
     const current = map.get(key) ?? {
       groupName: key,
       groupColor: task.group_color,
-      counts: { 계획: 0, 품의: 0, 결과보고: 0 },
+      counts: { 계획: 0, '심의·협의': 0, 품의: 0, 결과보고: 0 },
       hasMissingResultReport: false,
     };
     const stage = normalizeWorkflowCardStage(task.category);

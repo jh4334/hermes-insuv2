@@ -16,6 +16,7 @@ export type Task = {
   readonly start_date: string;
   readonly end_date: string | null;
   readonly category: string | null;
+  readonly job_name?: string | null;
   readonly group_name: string;
   readonly group_color: string;
   readonly priority: Priority;
@@ -107,6 +108,7 @@ export function normalizeStoredTasks(value: unknown): Task[] {
       start_date: startDate,
       end_date: stringOrNull(item.end_date),
       category: stringOrNull(item.category),
+      job_name: stringOrNull(item.job_name),
       group_name: group.name,
       group_color: group.color,
       priority: priorityOrNormal(item.priority),

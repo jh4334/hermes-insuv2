@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { UploadHero } from './UploadHero';
 import { TaskGroupPill } from '../TaskGroupControls';
 import { normalizeTaskGroupName } from '../taskGroups';
+import type { PersonaCopy } from '../persona';
 import type { Task } from '../taskStorage';
 import type { NewTaskInput } from '../types';
 
@@ -10,15 +11,17 @@ export function IntakeBundleSection({
   onAddTasks,
   onLoadSampleDemoData,
   onDeleteGroup,
+  personaCopy,
 }: {
   tasks: Task[];
   onAddTasks: (tasks: NewTaskInput[]) => Task[];
   onLoadSampleDemoData: () => void;
   onDeleteGroup: (groupName: string) => void;
+  personaCopy?: PersonaCopy;
 }) {
   return (
     <section aria-label="PDF 업로드와 업무묶음 관리" className="grid items-stretch gap-4 lg:grid-cols-2">
-      <UploadHero existingGroups={tasks.map((task) => ({ group_name: task.group_name, group_color: task.group_color }))} onAddTasks={onAddTasks} onLoadSampleDemoData={onLoadSampleDemoData} hasExistingTasks={tasks.length > 0} />
+      <UploadHero existingGroups={tasks.map((task) => ({ group_name: task.group_name, group_color: task.group_color }))} onAddTasks={onAddTasks} onLoadSampleDemoData={onLoadSampleDemoData} hasExistingTasks={tasks.length > 0} personaCopy={personaCopy} />
       <BundleManager tasks={tasks} onDeleteGroup={onDeleteGroup} />
     </section>
   );

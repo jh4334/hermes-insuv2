@@ -6,9 +6,20 @@ import {
   pdfExtractionSummaryMessage,
   pdfFailureMessageWithGuidance,
 } from '../lib/format';
-import { normalizeTaskGroupName, pickTaskGroupColor } from '../taskGroups';
+import { classifyCards } from '../classify/engine';
+import type { ClassifyResult } from '../classify/engine';
+import {
+  UNCLASSIFIED_GROUP_NAME,
+  learnAssignment,
+  readRuleMemory,
+  writeRuleMemory,
+} from '../classify/ruleMemory';
+import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName, pickTaskGroupColor } from '../taskGroups';
+import type { PersonaCopy } from '../persona';
 import type { ExtractedFile, NewTaskInput, PreviewTaskInput } from '../types';
 import type { Task } from '../taskStorage';
+import { ClassifyReviewDialog } from './ClassifyReviewDialog';
+import type { BucketAssignment } from './ClassifyReviewDialog';
 import { PreviewDialog } from './PreviewDialog';
 
 async function readErrorMessage(response: Response, fallback: string) {
@@ -52,11 +63,13 @@ export function UploadHero({
   onAddTasks,
   onLoadSampleDemoData,
   hasExistingTasks,
+  personaCopy,
 }: {
   existingGroups: ReadonlyArray<Pick<Task, 'group_name' | 'group_color'>>;
   onAddTasks: (tasks: NewTaskInput[]) => Task[];
   onLoadSampleDemoData: () => void;
   hasExistingTasks: boolean;
+  personaCopy?: PersonaCopy;
 }) {
   const currentYear = new Date().getFullYear();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +78,7 @@ export function UploadHero({
   const [targetYear, setTargetYear] = useState(currentYear);
   const [documentType, setDocumentType] = useState<'draft' | 'received'>('draft');
   const [preview, setPreview] = useState<PreviewTaskInput[] | null>(null);
+  const [review, setReview] = useState<ClassifyResult | null>(null);
   const [extracted, setExtracted] = useState<ExtractedFile[]>([]);
   const [message, setMessage] = useState('PDF 여러 개 선택 가능 · 원본 파일은 앱 DB/영구 저장소에 저장하지 않습니다');
   const [messageTone, setMessageTone] = useState<'info' | 'error' | 'success'>('info');
@@ -114,19 +128,43 @@ export function UploadHero({
     }
   }
 
-  function savePreview(groupNameInput: string) {
-    if (!preview) return;
-    const groupName = normalizeTaskGroupName(groupNameInput);
-    const existingGroup = existingGroups.find((task) => normalizeTaskGroupName(task.group_name) === groupName);
-    const groupColor = existingGroup?.group_color ?? pickTaskGroupColor(existingGroups.map((task) => task.group_color));
-    const saved = onAddTasks(preview.map((task) => ({
-      ...task,
-      priority: 'normal',
-      group_name: groupName,
-      group_color: groupColor,
-    })));
+  function openClassifyReview() {
+    if (!preview || preview.length === 0) return;
+    setReview(classifyCards(preview.map((task) => ({ title: task.title, category: task.category })), readRuleMemory()));
+  }
+
+  function saveAssignments(assignments: BucketAssignment[]) {
+    const colorByGroup = new Map<string, string>();
+    for (const group of existingGroups) {
+      const name = normalizeTaskGroupName(group.group_name);
+      if (!colorByGroup.has(name)) colorByGroup.set(name, group.group_color);
+    }
+    let rules = readRuleMemory();
+    const inputs: NewTaskInput[] = assignments.map((assignment) => {
+      const groupName = normalizeTaskGroupName(assignment.groupName);
+      let groupColor = colorByGroup.get(groupName);
+      if (!groupColor) {
+        groupColor = groupName === UNCLASSIFIED_GROUP_NAME ? DEFAULT_TASK_GROUP_COLOR : pickTaskGroupColor([...colorByGroup.values()]);
+        colorByGroup.set(groupName, groupColor);
+      }
+      if (groupName !== UNCLASSIFIED_GROUP_NAME) {
+        rules = learnAssignment(rules, assignment.task.title, groupName, assignment.jobName);
+      }
+      return {
+        ...assignment.task,
+        priority: 'normal',
+        category: assignment.stage,
+        job_name: assignment.jobName,
+        group_name: groupName,
+        group_color: groupColor,
+      };
+    });
+    writeRuleMemory(rules);
+    const saved = onAddTasks(inputs);
+    setReview(null);
     setPreview(null);
-    toast.success(`${saved.length}개 업무를 ${groupName} 묶음으로 추가했습니다`);
+    const groupCount = new Set(inputs.map((input) => input.group_name)).size;
+    toast.success(`${saved.length}개 업무를 ${groupCount}개 묶음으로 추가했습니다 — 구조도에서 마저 정리하세요`);
   }
 
   function openManualEntry() {
@@ -153,8 +191,8 @@ export function UploadHero({
               {busy ? <Loader2 className="size-5 animate-spin text-ember" /> : <UploadCloud className="size-5 text-ember" />}
             </div>
             <div>
-              <h2 className="mb-1 font-display text-lg font-semibold">{busy ? '공문 분석 중...' : '공문 PDF 업로드'}</h2>
-              <p className="text-sm text-muted-foreground">{busy ? '공문에서 필요한 정보를 확인하는 중입니다' : '기안문·접수공문을 업무묶음에 추가하세요'}</p>
+              <h2 className="mb-1 font-display text-lg font-semibold">{busy ? '공문 분석 중...' : personaCopy?.uploadTitle ?? '공문 PDF 업로드'}</h2>
+              <p className="text-sm text-muted-foreground">{busy ? '공문에서 필요한 정보를 확인하는 중입니다' : personaCopy?.uploadSubtitle ?? '문서를 우르르 올리면 자동 분류가 세부업무 후보를 제안합니다'}</p>
               <p className="mt-2 text-xs text-muted-foreground" role={messageTone === 'error' ? 'alert' : 'status'} aria-live="polite">{message}</p>
             </div>
           </div>
@@ -226,7 +264,16 @@ export function UploadHero({
           </fieldset>
         </div>
       </section>
-      {preview && <PreviewDialog tasks={preview} extracted={extracted} existingGroups={existingGroups} onChange={setPreview} onClose={() => setPreview(null)} onSave={savePreview} saving={busy} />}
+      {preview && !review && <PreviewDialog tasks={preview} extracted={extracted} onChange={setPreview} onClose={() => setPreview(null)} onSave={openClassifyReview} saving={busy} />}
+      {preview && review && (
+        <ClassifyReviewDialog
+          tasks={preview}
+          classification={review}
+          existingGroups={existingGroups}
+          onConfirm={saveAssignments}
+          onClose={() => setReview(null)}
+        />
+      )}
     </>
   );
 }

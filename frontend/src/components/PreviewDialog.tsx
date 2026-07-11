@@ -1,8 +1,5 @@
-import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { suggestGroupNameFromPreview, uniqueExistingGroups } from '../lib/format';
 import type { ExtractedFile, PreviewTaskInput } from '../types';
-import type { Task } from '../taskStorage';
 
 function displayOrDash(value?: string | null) {
   return value && value.trim().length > 0 ? value : '–';
@@ -11,7 +8,6 @@ function displayOrDash(value?: string | null) {
 export function PreviewDialog({
   tasks,
   extracted,
-  existingGroups,
   onChange,
   onClose,
   onSave,
@@ -19,16 +15,12 @@ export function PreviewDialog({
 }: {
   tasks: PreviewTaskInput[];
   extracted: ExtractedFile[];
-  existingGroups: ReadonlyArray<Pick<Task, 'group_name' | 'group_color'>>;
   onChange: (next: PreviewTaskInput[]) => void;
   onClose: () => void;
-  onSave: (groupName: string) => void;
+  onSave: () => void;
   saving: boolean;
 }) {
-  const suggestedGroupName = useMemo(() => (extracted.length > 0 ? suggestGroupNameFromPreview(tasks) : ''), [extracted.length, tasks]);
-  const existingGroupOptions = useMemo(() => uniqueExistingGroups(existingGroups), [existingGroups]);
-  const [groupName, setGroupName] = useState(suggestedGroupName);
-  const canSave = !saving && tasks.length > 0 && groupName.trim().length > 0;
+  const canSave = !saving && tasks.length > 0;
   const hasReceivedDocuments = tasks.some((task) => task.document_type === 'received' || task.sender_org);
   const actorLabel = hasReceivedDocuments ? '발신기관' : '담당';
   const remove = (i: number) => onChange(tasks.filter((_, idx) => idx !== i));
@@ -106,38 +98,12 @@ export function PreviewDialog({
           </aside>
         </div>
         <footer className="flex flex-col gap-3 border-t border-border px-5 py-3 md:flex-row md:items-end md:justify-between">
-          <label className="block max-w-sm flex-1 space-y-1">
-            <span className="text-xs font-medium text-foreground">업무묶음 이름</span>
-            <input
-              aria-label="업무묶음 이름 입력"
-              value={groupName}
-              onChange={(event) => setGroupName(event.target.value)}
-              placeholder="교육과정 또는 계기교육"
-              className="w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ember"
-            />
-            <span className="block text-xs text-muted-foreground">
-              {suggestedGroupName ? `업무묶음 이름 제안: ${suggestedGroupName} · 교사가 수정 가능` : '업무묶음 이름을 입력해주세요 예) 교육과정, 계기교육'}
-            </span>
-            {existingGroupOptions.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 pt-1" aria-label="기존 업무묶음 선택">
-                {existingGroupOptions.map((group) => (
-                  <button
-                    key={group.group_name}
-                    type="button"
-                    onClick={() => setGroupName(group.group_name)}
-                    className="inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs font-medium leading-none text-foreground shadow-sm hover:border-ember"
-                    aria-label={`기존 묶음 ${group.group_name} 선택`}
-                  >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: group.group_color }} aria-hidden="true" />
-                    {group.group_name}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </label>
+          <p className="max-w-sm text-xs text-muted-foreground">
+            묶음 이름을 미리 정할 필요가 없어요. 다음 단계에서 자동 분류가 세부업무 후보를 제안하고, 애매한 카드는 미분류로 보내 구조도에서 정리합니다.
+          </p>
           <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className="px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground">취소</button>
-          <button disabled={!canSave} onClick={() => onSave(groupName)} className="bg-ember px-4 py-1.5 text-sm font-semibold text-ember-foreground hover:brightness-110 disabled:opacity-50">{saving ? '저장 중...' : `${tasks.length}건 보드에 추가`}</button>
+          <button disabled={!canSave} onClick={onSave} className="bg-ember px-4 py-1.5 text-sm font-semibold text-ember-foreground hover:brightness-110 disabled:opacity-50">{saving ? '저장 중...' : `${tasks.length}건 자동 분류 제안 보기`}</button>
           </div>
         </footer>
       </div>

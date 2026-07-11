@@ -1,7 +1,7 @@
 import type { BundlePmiMemo, Memo, Task } from './taskStorage';
 import type { WORKFLOW_CARD_STAGES, WORKFLOW_STAGES } from './theme/tokens';
 
-export type View = 'calendar' | 'archive' | 'export';
+export type View = 'calendar' | 'structure' | 'archive' | 'export';
 
 export interface NewTaskInput extends Omit<Task, 'id' | 'created_at' | 'updated_at'> {}
 export type PreviewTaskInput = Omit<NewTaskInput, 'group_name' | 'group_color'>;
