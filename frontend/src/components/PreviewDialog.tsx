@@ -13,6 +13,7 @@ export function PreviewDialog({
   onClose,
   onSave,
   saving,
+  classifying = false,
 }: {
   tasks: PreviewTaskInput[];
   extracted: ExtractedFile[];
@@ -20,9 +21,10 @@ export function PreviewDialog({
   onClose: () => void;
   onSave: () => void;
   saving: boolean;
+  classifying?: boolean;
 }) {
   const dialogRef = useDialogA11y<HTMLDivElement>(onClose);
-  const canSave = !saving && tasks.length > 0;
+  const canSave = !saving && !classifying && tasks.length > 0;
   const hasReceivedDocuments = tasks.some((task) => task.document_type === 'received' || task.sender_org);
   const actorLabel = hasReceivedDocuments ? '발신기관' : '담당';
   const remove = (i: number) => onChange(tasks.filter((_, idx) => idx !== i));
@@ -105,7 +107,7 @@ export function PreviewDialog({
           </p>
           <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className="px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground">취소</button>
-          <button disabled={!canSave} onClick={onSave} className="bg-ember px-4 py-1.5 text-sm font-semibold text-ember-foreground hover:brightness-110 disabled:opacity-50">{saving ? '저장 중...' : `${tasks.length}건 자동 분류 제안 보기`}</button>
+          <button disabled={!canSave} onClick={onSave} aria-busy={classifying} className="bg-ember px-4 py-1.5 text-sm font-semibold text-ember-foreground hover:brightness-110 disabled:opacity-50">{saving ? '저장 중...' : classifying ? '자동 분류 중...' : `${tasks.length}건 자동 분류 제안 보기`}</button>
           </div>
         </footer>
       </div>

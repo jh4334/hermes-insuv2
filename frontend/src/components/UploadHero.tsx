@@ -80,6 +80,7 @@ export function UploadHero({
   const [documentType, setDocumentType] = useState<'draft' | 'received'>('draft');
   const [preview, setPreview] = useState<PreviewTaskInput[] | null>(null);
   const [review, setReview] = useState<ClassifyResult | null>(null);
+  const [classifying, setClassifying] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedFile[]>([]);
   const [message, setMessage] = useState('PDF 여러 개 선택 가능 · 원본 파일은 앱 DB/영구 저장소에 저장하지 않습니다');
   const [messageTone, setMessageTone] = useState<'info' | 'error' | 'success'>('info');
@@ -130,14 +131,19 @@ export function UploadHero({
   }
 
   async function openClassifyReview() {
-    if (!preview || preview.length === 0) return;
+    if (!preview || preview.length === 0 || classifying) return;
     let result = classifyCards(preview.map((task) => ({ title: task.title, category: task.category })), readRuleMemory());
     if (readOnlineLlmEnabled()) {
       // 옵트인한 경우에만 제목만 전송. 실패하면 조용히 오프라인 결과를 쓴다.
-      const suggestions = await fetchLlmSuggestions(preview.map((task) => task.title));
-      if (suggestions) {
-        result = mergeLlmSuggestions(result, suggestions);
-        toast.success('온라인 LLM 분류 제안을 반영했어요');
+      setClassifying(true);
+      try {
+        const suggestions = await fetchLlmSuggestions(preview.map((task) => task.title));
+        if (suggestions) {
+          result = mergeLlmSuggestions(result, suggestions);
+          toast.success('온라인 LLM 분류 제안을 반영했어요');
+        }
+      } finally {
+        setClassifying(false);
       }
     }
     setReview(result);
@@ -275,7 +281,7 @@ export function UploadHero({
           </fieldset>
         </div>
       </section>
-      {preview && !review && <PreviewDialog tasks={preview} extracted={extracted} onChange={setPreview} onClose={() => setPreview(null)} onSave={openClassifyReview} saving={busy} />}
+      {preview && !review && <PreviewDialog tasks={preview} extracted={extracted} onChange={setPreview} onClose={() => setPreview(null)} onSave={openClassifyReview} saving={busy} classifying={classifying} />}
       {preview && review && (
         <ClassifyReviewDialog
           tasks={preview}

@@ -90,3 +90,12 @@ describe('mergeLlmSuggestions', () => {
     expect(merged.cards[0].stage).toBe('계획');
   });
 });
+
+// The offline path must render immediately (no await), so merging an empty
+// suggestion list is a no-op that returns the base result unchanged.
+describe('offline path is synchronous-safe', () => {
+  it('mergeLlmSuggestions with empty array returns the base result unchanged', () => {
+    const base = classifyCards([{ title: '안전교육 계획', category: '계획' }]);
+    expect(mergeLlmSuggestions(base, [])).toBe(base);
+  });
+});
