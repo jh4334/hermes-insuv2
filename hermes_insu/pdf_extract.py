@@ -409,14 +409,35 @@ def extract_document_row_from_bytes(data: bytes, file_name: str, document_type: 
     return extract_document_row_from_text(text, file_name, method, document_type=document_type)
 
 
+def _failed_row(file_name: str, document_type: str) -> dict:
+    """한 파일의 파싱이 실패했을 때, 배치 전체를 죽이지 않고 돌려줄 안전한 행."""
+    return {
+        "file_name": file_name,
+        "date": "",
+        "doc_number": "",
+        "title": file_name,
+        "owner": "",
+        "sender_org": "",
+        "document_type": document_type,
+        "department": "",
+        "extraction_confidence": 0,
+        "extract_status": "추출 실패 - 수동 입력 필요",
+        "extraction_evidence": "이 파일에서 정보를 읽지 못했습니다",
+    }
+
+
 def convert_uploaded_pdfs_to_document_rows(files: Iterable[BinaryIO], document_type: str = "draft") -> list[dict]:
     rows: list[dict] = []
     for uploaded in files:
         file_name = getattr(uploaded, "filename", None) or getattr(uploaded, "name", None) or "document.pdf"
-        data = uploaded.read()
+        # 파일별로 격리: 한 파일이 어떤 이유로든 실패해도 나머지 정상 파일은 살린다.
         try:
-            uploaded.seek(0)
+            data = uploaded.read()
+            try:
+                uploaded.seek(0)
+            except Exception:
+                pass
+            rows.append(extract_document_row_from_bytes(data, str(file_name), document_type=document_type))
         except Exception:
-            pass
-        rows.append(extract_document_row_from_bytes(data, str(file_name), document_type=document_type))
+            rows.append(_failed_row(str(file_name), document_type))
     return rows
