@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Inbox, Pencil } from 'lucide-react';
+import { AlertTriangle, Inbox, Pencil, Plus, X } from 'lucide-react';
 import { UNCLASSIFIED_GROUP_NAME } from '../classify/ruleMemory';
 import { normalizeWorkflowCardStage } from '../lib/format';
-import { normalizeTaskGroupName } from '../taskGroups';
+import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName } from '../taskGroups';
 import { WORKFLOW_CARD_STAGES } from '../theme/tokens';
 import { TaskGroupPill } from '../TaskGroupControls';
 import type { Task } from '../taskStorage';
@@ -92,6 +92,22 @@ export function StructureBoard({
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [pendingGroupNames, setPendingGroupNames] = useState<string[]>([]);
+  const pendingGroups: StructureGroup[] = pendingGroupNames
+    .filter((name) => !groups.some((group) => group.name === name))
+    .map((name) => ({ name, color: DEFAULT_TASK_GROUP_COLOR, jobName: null, tasks: [] }));
+
+  function addPendingGroup() {
+    const name = normalizeTaskGroupName(newGroupName);
+    if (!newGroupName.trim() || name === UNCLASSIFIED_GROUP_NAME) return;
+    if (groups.some((group) => group.name === name) || pendingGroupNames.includes(name)) {
+      setNewGroupName('');
+      return;
+    }
+    setPendingGroupNames((current) => [...current, name]);
+    setNewGroupName('');
+  }
 
   const jobNames = useMemo(
     () => [...new Set(groups.map((group) => group.jobName).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b, 'ko')),
@@ -162,12 +178,12 @@ export function StructureBoard({
     );
   }
 
-  function renderGroupLane(group: StructureGroup, isInbox = false) {
+  function renderGroupLane(group: StructureGroup, isInbox = false, isPending = false) {
     const checks = groupChecks(group);
     return (
       <section
         aria-label={`${group.name} 세부업무 레인`}
-        className={'border p-3 ' + (isInbox ? 'border-dashed border-ember/40 bg-ember-soft/30' : 'border-border bg-surface')}
+        className={'border p-3 ' + (isInbox ? 'border-dashed border-ember/40 bg-ember-soft/30' : isPending ? 'border-dashed border-border bg-surface/70' : 'border-border bg-surface')}
       >
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {isInbox ? <Inbox className="size-4 text-ember" aria-hidden /> : null}
@@ -187,7 +203,20 @@ export function StructureBoard({
           ) : (
             <TaskGroupPill groupName={group.name} groupColor={group.color} />
           )}
-          {!isInbox && renamingGroup !== group.name ? (
+          {isPending ? (
+            <>
+              <span className="text-[11px] text-muted-foreground">미분류 카드를 끌어다 놓으면 만들어져요</span>
+              <button
+                type="button"
+                aria-label={`${group.name} 빈 레인 삭제`}
+                onClick={() => setPendingGroupNames((current) => current.filter((name) => name !== group.name))}
+                className="ml-auto text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </button>
+            </>
+          ) : null}
+          {!isInbox && !isPending && renamingGroup !== group.name ? (
             <button
               type="button"
               aria-label={`${group.name} 이름 수정`}
@@ -209,7 +238,7 @@ export function StructureBoard({
               <AlertTriangle className="size-3" aria-hidden /> {check.message}
             </span>
           ))}
-          {!isInbox ? (
+          {!isInbox && !isPending ? (
             <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
               업무
               <input
@@ -263,6 +292,27 @@ export function StructureBoard({
         {jobNames.map((name) => <option key={name} value={name} />)}
       </datalist>
       {unclassified ? renderGroupLane(unclassified, true) : null}
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-surface p-3" aria-label="새 세부업무 만들기">
+        <Plus className="size-4 text-ember" aria-hidden />
+        <input
+          aria-label="새 세부업무 이름"
+          value={newGroupName}
+          onChange={(event) => setNewGroupName(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') addPendingGroup(); }}
+          placeholder="예: 통일, 안전교육"
+          className="w-44 border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-ember"
+        />
+        <button
+          type="button"
+          onClick={addPendingGroup}
+          disabled={!newGroupName.trim()}
+          className="border border-ember bg-ember px-3 py-1.5 text-xs font-semibold text-ember-foreground hover:brightness-110 disabled:opacity-50"
+        >
+          새 세부업무 추가
+        </button>
+        <span className="text-[11px] text-muted-foreground">빈 레인을 만든 뒤 미분류 카드를 끌어다 놓으세요</span>
+      </div>
+      {pendingGroups.map((group) => <div key={group.name}>{renderGroupLane(group, false, true)}</div>)}
       {jobSections.map(([jobName, jobGroups]) => (
         <section key={jobName} aria-label={`${jobName} 업무 구역`} className="space-y-2">
           <h3 className="flex items-baseline gap-2 font-display text-base font-extrabold tracking-tight">

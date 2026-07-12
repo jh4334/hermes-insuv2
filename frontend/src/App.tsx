@@ -42,7 +42,7 @@ import { PERSONA_COPY, readPersonaMode, writePersonaMode } from './persona';
 import type { PersonaMode } from './persona';
 import { StructureBoard } from './components/StructureBoard';
 import type { StructureCardPatch } from './components/StructureBoard';
-import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName } from './taskGroups';
+import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName, pickTaskGroupColor } from './taskGroups';
 import {
   buildSuccessorHandoffMarkdown,
   createLocalDataSnapshot,
@@ -308,7 +308,9 @@ export function App() {
     const targetGroupName = normalizeTaskGroupName(patch.group_name ?? task.group_name);
     const groupChanged = targetGroupName !== normalizeTaskGroupName(task.group_name);
     const targetGroupTask = groupChanged ? tasks.find((item) => normalizeTaskGroupName(item.group_name) === targetGroupName) : null;
-    const fallbackColor = targetGroupName === UNCLASSIFIED_GROUP_NAME ? DEFAULT_TASK_GROUP_COLOR : task.group_color;
+    const fallbackColor = targetGroupName === UNCLASSIFIED_GROUP_NAME
+      ? DEFAULT_TASK_GROUP_COLOR
+      : pickTaskGroupColor([...new Set(tasks.map((item) => item.group_color))]);
     const next = tasks.map((item) =>
       item.id === taskId
         ? {

@@ -88,6 +88,24 @@ describe('StructureBoard', () => {
     expect(onAssignJob).toHaveBeenCalledWith('급식', '급식운영');
   });
 
+  it('creates an empty pending lane so a new 세부업무 can be made by dragging', () => {
+    const onMoveCard = vi.fn();
+    render(<StructureBoard tasks={TASKS} onMoveCard={onMoveCard} onRenameGroup={vi.fn()} onAssignJob={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/새 세부업무 이름/i), { target: { value: '안전교육' } });
+    fireEvent.click(screen.getByRole('button', { name: /새 세부업무 추가/i }));
+
+    const pendingLane = screen.getByLabelText(/안전교육 세부업무 레인/i);
+    expect(within(pendingLane).getByText(/미분류 카드를 끌어다 놓으면 만들어져요/i)).toBeInTheDocument();
+
+    fireEvent.dragStart(screen.getByRole('listitem', { name: /정체불명 공문 구조도 카드/i }));
+    fireEvent.drop(within(pendingLane).getByLabelText(/안전교육 계획 칸 0건/i));
+    expect(onMoveCard).toHaveBeenCalledWith('t4', { group_name: '안전교육', category: '계획' });
+
+    fireEvent.click(within(pendingLane).getByLabelText(/안전교육 빈 레인 삭제/i));
+    expect(screen.queryByLabelText(/안전교육 세부업무 레인/i)).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no cards', () => {
     render(<StructureBoard tasks={[]} onMoveCard={vi.fn()} onRenameGroup={vi.fn()} onAssignJob={vi.fn()} />);
     expect(screen.getByText(/구조도에 놓을 카드가 아직 없어요/i)).toBeInTheDocument();

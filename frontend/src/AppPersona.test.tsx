@@ -190,6 +190,26 @@ describe('structure view integration', () => {
     });
   });
 
+  it('creates a new 세부업무 lane and moving a card into it picks a fresh palette color', async () => {
+    seedStructureTasks();
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/새 세부업무 이름/i), { target: { value: '안전교육' } });
+    fireEvent.click(screen.getByRole('button', { name: /새 세부업무 추가/i }));
+    fireEvent.dragStart(screen.getByRole('listitem', { name: /통일교육 결과 자료 제출 구조도 카드/i }));
+    fireEvent.drop(screen.getByLabelText(/안전교육 결과보고 칸 0건/i));
+
+    await waitFor(() => {
+      const snapshot = JSON.parse(storage.get(SNAPSHOT_KEY) ?? '{}');
+      const moved = snapshot.tasks.find((task: { id: string }) => task.id === 'inbox-1');
+      expect(moved.group_name).toBe('안전교육');
+      expect(moved.category).toBe('결과보고');
+      expect(moved.group_color).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(moved.group_color).not.toBe('#475569');
+      expect(moved.group_color).not.toBe('#2563eb');
+    });
+  });
+
   it('renames a 세부업무 and assigns an 업무 bucket from the structure view', async () => {
     seedStructureTasks();
     render(<App />);
