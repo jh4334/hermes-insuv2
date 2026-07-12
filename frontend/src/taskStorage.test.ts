@@ -6,6 +6,7 @@ import {
   normalizeStoredBundlePmiMemos,
   normalizeStoredTasks,
   parseLocalBackupText,
+  persistLocalData,
 } from './taskStorage';
 import type { BundlePmiMemo, Memo, Task } from './taskStorage';
 
@@ -150,7 +151,7 @@ describe('successor handoff markdown', () => {
 
     expect(markdown).toContain('# 업무묶음 Plus/Minus 정리');
     expect(markdown).toContain('원본 PDF 파일이나 원문 추출 텍스트는 포함하지 않습니다');
-    expect(markdown.match(/^## /gm)).toHaveLength(2);
+    expect(markdown.match(/^## /gm)).toHaveLength(3); // 업무 구조 개요 + 그룹 2개
     expect(markdown).toContain('## 안전 Plus/Minus 메모');
     expect(markdown).toContain('- 기간: 2026-05-11 ~ 2026-06-01');
     expect(markdown).toContain('- 진행 요약: 완료 1건 / 진행 1건');
@@ -175,5 +176,92 @@ describe('successor handoff markdown', () => {
     expect(markdown).toContain('# 업무묶음 Plus/Minus 정리');
     expect(markdown).toContain('- [입력 예정] 업무묶음이 없습니다.');
     expect(markdown.match(/^## /gm)).toBeNull();
+  });
+});
+
+describe('learned rules in local backup', () => {
+  it('includes learned rules in the snapshot and restores them through parseLocalBackupText', () => {
+    const rules = [{ keyword: '통일교육주간', group_name: '통일', job_name: '계기교육', hits: 2, updated_at: '2026-06-01T00:00:00.000Z' }];
+    const snapshot = createLocalDataSnapshot([], [], [], '2026-06-30T00:00:00.000Z', rules);
+    expect(snapshot.learnedRules).toEqual(rules);
+
+    const parsed = parseLocalBackupText(JSON.stringify(snapshot));
+    if (!parsed.ok) throw new Error(parsed.message);
+    expect(parsed.snapshot.learnedRules).toEqual(rules);
+  });
+
+  it('defaults to an empty rule list for backups made before rules existed', () => {
+    const legacy = createLocalDataSnapshot([], [], [], '2026-06-30T00:00:00.000Z');
+    const { learnedRules: _dropped, ...withoutRules } = legacy;
+    const parsed = parseLocalBackupText(JSON.stringify(withoutRules));
+    if (!parsed.ok) throw new Error(parsed.message);
+    expect(parsed.snapshot.learnedRules).toEqual([]);
+  });
+});
+
+describe('job hierarchy in the handoff markdown', () => {
+  it('adds an 업무 구조 overview and per-group 소속 업무 lines', () => {
+    const unifiedTask: Task = {
+      id: 'job-1',
+      title: '통일교육주간 운영 계획',
+      description: null,
+      start_date: '2026-05-11',
+      end_date: null,
+      category: '계획',
+      job_name: '계기교육',
+      group_name: '통일',
+      group_color: '#2563eb',
+      priority: 'normal',
+      source_doc: 'DOC-1',
+      owner: null,
+      successor_memo: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    };
+    const strayTask: Task = { ...unifiedTask, id: 'job-2', title: '독서 골든벨 운영', job_name: null, group_name: '독서교육', start_date: '2026-06-01' };
+
+    const markdown = buildSuccessorHandoffMarkdown([unifiedTask, strayTask], [], '2026-06-30T00:00:00.000Z');
+
+    expect(markdown).toContain('## 업무 구조');
+    expect(markdown).toContain('- 계기교육: 통일');
+    expect(markdown).toContain('- 업무 미지정: 독서교육');
+    expect(markdown.indexOf('- 계기교육: 통일')).toBeLessThan(markdown.indexOf('- 업무 미지정: 독서교육'));
+    expect(markdown).toContain('- 소속 업무: 계기교육');
+  });
+});
+
+describe('persistLocalData failure handling', () => {
+  it('returns persisted:false without throwing when setItem fails (quota exceeded)', () => {
+    const original = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: {
+        getItem: () => null,
+        setItem: () => { throw new DOMException('quota', 'QuotaExceededError'); },
+        removeItem: () => {},
+        clear: () => {},
+      },
+      configurable: true,
+    });
+    try {
+      const result = persistLocalData([], [], []);
+      expect(result.persisted).toBe(false);
+      expect(result.snapshot.schemaVersion).toBe(1);
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: original, configurable: true });
+    }
+  });
+
+  it('returns persisted:true on a normal write', () => {
+    const store = new Map<string, string>();
+    const original = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: () => {}, clear: () => store.clear() },
+      configurable: true,
+    });
+    try {
+      expect(persistLocalData([], [], []).persisted).toBe(true);
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: original, configurable: true });
+    }
   });
 });

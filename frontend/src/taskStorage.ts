@@ -4,6 +4,8 @@ import {
   normalizeTaskGroupColor,
   normalizeTaskGroupName,
 } from './taskGroups';
+import { normalizeStoredRules } from './classify/ruleMemory';
+import type { LearnedRule } from './classify/ruleMemory';
 import { parsePmiMemo, serializePmiMemo } from './lib/format';
 
 export type Priority = 'critical' | 'high' | 'normal' | 'low';
@@ -16,6 +18,8 @@ export type Task = {
   readonly start_date: string;
   readonly end_date: string | null;
   readonly category: string | null;
+  readonly job_name?: string | null;
+  readonly project_name?: string | null;
   readonly group_name: string;
   readonly group_color: string;
   readonly priority: Priority;
@@ -52,6 +56,8 @@ export type LocalDataSnapshot = {
   readonly tasks: Task[];
   readonly memos: Memo[];
   readonly bundlePmiMemos: BundlePmiMemo[];
+  /** 자동 분류 학습 규칙(키워드→그룹). 인계자→인수자 백업 전달 시 함께 넘어간다. */
+  readonly learnedRules: LearnedRule[];
 };
 
 export type BackupImportResult =
@@ -107,6 +113,8 @@ export function normalizeStoredTasks(value: unknown): Task[] {
       start_date: startDate,
       end_date: stringOrNull(item.end_date),
       category: stringOrNull(item.category),
+      job_name: stringOrNull(item.job_name),
+      project_name: stringOrNull(item.project_name),
       group_name: group.name,
       group_color: group.color,
       priority: priorityOrNormal(item.priority),
@@ -192,6 +200,7 @@ export function createLocalDataSnapshot(
   memos: Memo[],
   bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [],
   exportedAt = new Date().toISOString(),
+  learnedRules: LearnedRule[] = [],
 ): LocalDataSnapshot {
   const normalizedTasks = normalizeStoredTasks(tasks);
   const bundlePmiMemos = typeof bundlePmiMemosOrExportedAt === 'string'
@@ -203,6 +212,7 @@ export function createLocalDataSnapshot(
     tasks: normalizedTasks,
     memos: normalizeStoredMemos(memos),
     bundlePmiMemos,
+    learnedRules: normalizeStoredRules(learnedRules),
   };
 }
 
@@ -221,6 +231,12 @@ function writeStorageJson(key: string, value: unknown): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+export type PersistResult = {
+  readonly snapshot: LocalDataSnapshot;
+  /** localStorage 저장이 실제로 성공했는지. 실패(용량초과 등) 시 false. */
+  readonly persisted: boolean;
+};
+
 function snapshotFromUnknown(value: unknown): LocalDataSnapshot | null {
   if (!isRecord(value)) return null;
   if (value.schemaVersion !== LOCAL_SNAPSHOT_SCHEMA_VERSION) return null;
@@ -231,6 +247,7 @@ function snapshotFromUnknown(value: unknown): LocalDataSnapshot | null {
     normalizeStoredMemos(value.memos),
     normalizeStoredBundlePmiMemos(value.bundlePmiMemos, tasks),
     stringOrNull(value.exportedAt) ?? new Date().toISOString(),
+    normalizeStoredRules(value.learnedRules),
   );
 }
 
@@ -249,13 +266,27 @@ export function readLocalDataFromStorage(): LocalDataSnapshot {
   return snapshot;
 }
 
-export function writeLocalDataToStorage(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): LocalDataSnapshot {
+/**
+ * 스냅샷을 localStorage에 저장하되, 용량초과 등으로 실패해도 예외를 던지지 않고
+ * `persisted: false`로 알린다. 인메모리 상태는 호출부가 유지하므로 세션은 이어진다.
+ */
+export function persistLocalData(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): PersistResult {
   const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemosOrExportedAt, exportedAt);
-  writeStorageJson(LOCAL_SNAPSHOT_KEY, snapshot);
-  writeStorageJson(TASKS_KEY, snapshot.tasks);
-  writeStorageJson(MEMOS_KEY, snapshot.memos);
-  writeStorageJson(BUNDLE_PMI_MEMOS_KEY, snapshot.bundlePmiMemos);
-  return snapshot;
+  try {
+    writeStorageJson(LOCAL_SNAPSHOT_KEY, snapshot);
+    writeStorageJson(TASKS_KEY, snapshot.tasks);
+    writeStorageJson(MEMOS_KEY, snapshot.memos);
+    writeStorageJson(BUNDLE_PMI_MEMOS_KEY, snapshot.bundlePmiMemos);
+    return { snapshot, persisted: true };
+  } catch (_error) {
+    // 저장 실패(QuotaExceededError, 사생활 보호 모드 등). 데이터를 잃지 않도록
+    // 예외는 삼키고 호출부가 사용자에게 안내하도록 신호만 돌려준다.
+    return { snapshot, persisted: false };
+  }
+}
+
+export function writeLocalDataToStorage(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): LocalDataSnapshot {
+  return persistLocalData(tasks, memos, bundlePmiMemosOrExportedAt, exportedAt).snapshot;
 }
 
 export function parseLocalBackupText(text: string): BackupImportResult {
@@ -281,7 +312,13 @@ export function parseLocalBackupText(text: string): BackupImportResult {
 
   return {
     ok: true,
-    snapshot: createLocalDataSnapshot(tasks, memos, bundlePmiMemos, stringOrNull(parsed.exportedAt) ?? new Date().toISOString()),
+    snapshot: createLocalDataSnapshot(
+      tasks,
+      memos,
+      bundlePmiMemos,
+      stringOrNull(parsed.exportedAt) ?? new Date().toISOString(),
+      normalizeStoredRules(parsed.learnedRules),
+    ),
   };
 }
 
@@ -294,6 +331,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
   const exportDate = typeof bundlePmiMemosOrExportedAt === 'string' ? bundlePmiMemosOrExportedAt : exportedAt;
   type HandoffGroup = {
     readonly name: string;
+    readonly jobName: string | null;
     readonly tasks: Task[];
   };
 
@@ -307,6 +345,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
   const handoffGroups: HandoffGroup[] = Array.from(groupMap.entries())
     .map(([name, groupedTasks]) => ({
       name,
+      jobName: groupedTasks.find((task) => task.job_name?.trim())?.job_name?.trim() ?? null,
       tasks: groupedTasks.slice().sort((a, b) => a.start_date.localeCompare(b.start_date) || a.title.localeCompare(b.title, 'ko')),
     }))
     .sort((a, b) => {
@@ -330,6 +369,22 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
     return `${lines.join('\n')}\n`;
   }
 
+  const jobBuckets = new Map<string, string[]>();
+  for (const group of handoffGroups) {
+    const jobKey = group.jobName ?? '업무 미지정';
+    jobBuckets.set(jobKey, [...(jobBuckets.get(jobKey) ?? []), group.name]);
+  }
+  const jobEntries = Array.from(jobBuckets.entries()).sort((a, b) => {
+    if (a[0] === '업무 미지정') return 1;
+    if (b[0] === '업무 미지정') return -1;
+    return a[0].localeCompare(b[0], 'ko');
+  });
+  lines.push('## 업무 구조', '');
+  for (const [jobName, groupNames] of jobEntries) {
+    lines.push(`- ${jobName}: ${groupNames.join(', ')}`);
+  }
+  lines.push('');
+
   for (const group of handoffGroups) {
     const firstDate = group.tasks[0].start_date;
     const lastDate = group.tasks[group.tasks.length - 1].start_date;
@@ -339,6 +394,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
     lines.push(
       `## ${group.name} Plus/Minus 메모`,
       '',
+      ...(group.jobName ? [`- 소속 업무: ${group.jobName}`] : []),
       `- 기간: ${period}`,
       `- 진행 요약: 완료 ${completedCount}건 / 진행 ${inProgressCount}건`,
       '',

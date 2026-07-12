@@ -5,6 +5,7 @@ import {
   Download,
   Inbox,
   Maximize2,
+  Network,
   Pencil,
   X,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import { toast } from 'sonner';
 import { TaskGroupPill } from './TaskGroupControls';
 import { buildGroupHandoffDocx } from './exportDocx';
 import { loadKoreanPublicHolidays } from './holidayCalendar';
+import { readOnlineHolidaysEnabled } from './settings';
 import {
   buildCalendarMonths,
   buildMonthGridDates,
@@ -30,13 +32,24 @@ import {
   truncateCalendarTitle,
 } from './lib/format';
 import { buildSampleDemoData } from './sampleDemoData';
-import { normalizeTaskGroupName } from './taskGroups';
+import {
+  UNCLASSIFIED_GROUP_NAME,
+  learnAssignment,
+  mergeLearnedRules,
+  readRuleMemory,
+  writeRuleMemory,
+} from './classify/ruleMemory';
+import { PERSONA_COPY, readPersonaMode, writePersonaMode } from './persona';
+import type { PersonaMode } from './persona';
+import { StructureBoard } from './components/StructureBoard';
+import type { StructureCardPatch } from './components/StructureBoard';
+import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName, pickTaskGroupColor } from './taskGroups';
 import {
   buildSuccessorHandoffMarkdown,
   createLocalDataSnapshot,
   normalizeStoredBundlePmiMemos,
+  persistLocalData,
   readLocalDataFromStorage,
-  writeLocalDataToStorage,
 } from './taskStorage';
 import type { BundlePmiMemo, LocalDataSnapshot, Memo, Task } from './taskStorage';
 import { ExportScreen } from './components/ExportScreen';
@@ -58,6 +71,7 @@ import type {
 } from './types';
 const navItems: Array<{ id: View; label: string; icon: typeof CalendarDays }> = [
   { id: 'calendar', label: '캘린더', icon: CalendarDays },
+  { id: 'structure', label: '구조도', icon: Network },
   { id: 'archive', label: '업무목록', icon: Inbox },
   { id: 'export', label: '내보내기', icon: Download },
 ];
@@ -86,7 +100,7 @@ function download(filename: string, text: string, type = 'text/plain;charset=utf
 function StagePill({ stage, compact = false }: { stage?: string | null; compact?: boolean }) {
   const normalized = normalizeWorkflowStage(stage);
   if (!normalized) return null;
-  const tone = normalized === '계획' ? 'border-sky-200 bg-sky-50 text-sky-700' : normalized === '품의' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  const tone = normalized === '계획' ? 'border-sky-200 bg-sky-50 text-sky-700' : normalized === '심의·협의' ? 'border-violet-200 bg-violet-50 text-violet-700' : normalized === '품의' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700';
   return (
     <span aria-label={`단계: ${normalized}`} className={`inline-flex shrink-0 items-center rounded-full border font-mono font-semibold ${tone} ${compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-0.5 text-[11px]'}`}>
       {normalized}
@@ -97,7 +111,11 @@ function StagePill({ stage, compact = false }: { stage?: string | null; compact?
 export function App() {
   const initialDataRef = useRef<LocalDataSnapshot | null>(null);
   if (initialDataRef.current === null) initialDataRef.current = readLocalDataFromStorage();
-  const [view, setView] = useState<View>('calendar');
+  const [personaMode, setPersonaMode] = useState<PersonaMode | null>(() => readPersonaMode());
+  const [view, setView] = useState<View>(() => {
+    const stored = readPersonaMode();
+    return stored ? PERSONA_COPY[stored].defaultView : 'calendar';
+  });
   const [archiveGroupFocus, setArchiveGroupFocus] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>(() => initialDataRef.current?.tasks ?? []);
   const [memos, setMemos] = useState<Memo[]>(() => initialDataRef.current?.memos ?? []);
@@ -114,7 +132,7 @@ export function App() {
       setHolidayDates(new Set());
       return () => { cancelled = true; };
     }
-    loadKoreanPublicHolidays(holidayYears)
+    loadKoreanPublicHolidays(holidayYears, { online: readOnlineHolidaysEnabled() })
       .then((calendar) => {
         if (cancelled) return;
         setHolidayDates(calendar.dates);
@@ -128,11 +146,18 @@ export function App() {
 
   function saveLocalData(nextTasks: Task[], nextMemos: Memo[], status: string, nextBundlePmiMemos = bundlePmiMemos) {
     const normalizedBundlePmiMemos = normalizeStoredBundlePmiMemos(nextBundlePmiMemos, nextTasks);
-    writeLocalDataToStorage(nextTasks, nextMemos, normalizedBundlePmiMemos);
+    const { persisted } = persistLocalData(nextTasks, nextMemos, normalizedBundlePmiMemos);
+    // 저장이 실패해도(용량초과 등) 인메모리 상태는 갱신해 세션을 이어가되,
+    // 새로고침 시 유실될 수 있음을 명확히 안내한다.
     setTasks(nextTasks);
     setMemos(nextMemos);
     setBundlePmiMemos(normalizedBundlePmiMemos);
-    setStorageStatus(status);
+    if (persisted) {
+      setStorageStatus(status);
+    } else {
+      setStorageStatus('저장 공간이 부족해 이 기기에 저장하지 못했습니다');
+      toast.error('저장 공간이 부족해 변경 사항을 저장하지 못했어요. 내보내기에서 백업을 내려받고 오래된 데이터를 정리해 주세요.', { duration: 8000 });
+    }
   }
 
   function captureUndo(label: string) {
@@ -208,7 +233,7 @@ export function App() {
   }
 
   function exportBackup() {
-    const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemos, now());
+    const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemos, now(), readRuleMemory());
     download('modoo-insu-local-backup.json', JSON.stringify(snapshot, null, 2), 'application/json;charset=utf-8');
     setStorageStatus('로컬 백업 저장 완료');
     toast.success('로컬 백업 저장 완료');
@@ -216,6 +241,9 @@ export function App() {
 
   function applyBackupSnapshot(snapshot: LocalDataSnapshot, mode: BackupImportMode) {
     captureUndo(mode === 'append' ? '백업 추가' : '백업 대체');
+    if (snapshot.learnedRules.length > 0) {
+      writeRuleMemory(mode === 'replace' ? snapshot.learnedRules : mergeLearnedRules(readRuleMemory(), snapshot.learnedRules));
+    }
     if (mode === 'replace') {
       saveLocalData(snapshot.tasks, snapshot.memos, '백업 가져오기 완료', snapshot.bundlePmiMemos);
       toast.success('백업 가져오기 완료');
@@ -264,16 +292,100 @@ export function App() {
     }
   }
 
+  const unclassifiedCount = useMemo(
+    () => tasks.filter((task) => normalizeTaskGroupName(task.group_name) === UNCLASSIFIED_GROUP_NAME).length,
+    [tasks],
+  );
+
   function navigate(nextView: View) {
     if (nextView !== 'archive') setArchiveGroupFocus(null);
     setView(nextView);
   }
 
+  function pickPersona(mode: PersonaMode) {
+    writePersonaMode(mode);
+    setPersonaMode(mode);
+    setView(PERSONA_COPY[mode].defaultView);
+    toast.success(`${PERSONA_COPY[mode].label} 모드 — ${PERSONA_COPY[mode].toggleLabel}`);
+  }
+
+  function moveStructureCard(taskId: string, patch: StructureCardPatch) {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    captureUndo('구조도 이동');
+    const targetGroupName = normalizeTaskGroupName(patch.group_name ?? task.group_name);
+    const groupChanged = targetGroupName !== normalizeTaskGroupName(task.group_name);
+    const targetGroupTask = groupChanged ? tasks.find((item) => normalizeTaskGroupName(item.group_name) === targetGroupName) : null;
+    const fallbackColor = targetGroupName === UNCLASSIFIED_GROUP_NAME
+      ? DEFAULT_TASK_GROUP_COLOR
+      : pickTaskGroupColor([...new Set(tasks.map((item) => item.group_color))]);
+    const next = tasks.map((item) =>
+      item.id === taskId
+        ? {
+            ...item,
+            group_name: targetGroupName,
+            group_color: groupChanged ? targetGroupTask?.group_color ?? fallbackColor : item.group_color,
+            job_name: groupChanged ? targetGroupTask?.job_name ?? null : item.job_name,
+            category: patch.category !== undefined ? patch.category : item.category,
+            updated_at: now(),
+          }
+        : item,
+    );
+    saveLocalData(next, memos, '구조도 배치가 로컬 스냅샷에 저장되었습니다');
+    if (groupChanged && targetGroupName !== UNCLASSIFIED_GROUP_NAME) {
+      writeRuleMemory(learnAssignment(readRuleMemory(), task.title, targetGroupName, targetGroupTask?.job_name ?? null));
+      toast.success(`'${targetGroupName}' 배치를 규칙으로 학습했어요 — 다음 업로드부터 자동 배치됩니다`);
+    }
+  }
+
+  function renameStructureGroup(oldName: string, newName: string) {
+    const from = normalizeTaskGroupName(oldName);
+    const to = normalizeTaskGroupName(newName);
+    if (from === to) return;
+    captureUndo('세부업무 이름 변경');
+    const mergeTarget = tasks.find((task) => normalizeTaskGroupName(task.group_name) === to);
+    const next = tasks.map((task) => (normalizeTaskGroupName(task.group_name) === from
+      ? {
+          ...task,
+          group_name: to,
+          group_color: mergeTarget?.group_color ?? task.group_color,
+          job_name: mergeTarget ? mergeTarget.job_name ?? null : task.job_name,
+          updated_at: now(),
+        }
+      : task));
+    const nextBundlePmiMemos = bundlePmiMemos.map((memo) => (normalizeTaskGroupName(memo.group_name) === from ? { ...memo, group_name: to } : memo));
+    saveLocalData(next, memos, `${from} → ${to} 이름이 변경되었습니다`, nextBundlePmiMemos);
+    writeRuleMemory(readRuleMemory().map((rule) => (rule.group_name === from ? { ...rule, group_name: to } : rule)));
+    toast.success(`세부업무 이름을 ${to}(으)로 바꿨어요`);
+  }
+
+  function assignJobToGroup(groupName: string, jobName: string | null) {
+    const target = normalizeTaskGroupName(groupName);
+    captureUndo('업무 배정');
+    const next = tasks.map((task) => (normalizeTaskGroupName(task.group_name) === target ? { ...task, job_name: jobName, updated_at: now() } : task));
+    saveLocalData(next, memos, jobName ? `${target} 세부업무를 ${jobName} 업무로 묶었습니다` : `${target} 세부업무의 업무 배정을 해제했습니다`);
+    writeRuleMemory(readRuleMemory().map((rule) => (rule.group_name === target ? { ...rule, job_name: jobName } : rule)));
+  }
+
   return (
     <div data-testid="app-shell" className={'flex min-h-screen w-full bg-background text-foreground ' + (presentationMode ? 'presentation-mode' : '')}>
-      <AppSidebar active={view} presentationMode={presentationMode} onTogglePresentationMode={() => setPresentationMode((value) => !value)} onNavigate={navigate} />
+      {personaMode === null ? <PersonaOnboarding onPick={pickPersona} /> : null}
+      <AppSidebar active={view} personaMode={personaMode} unclassifiedCount={unclassifiedCount} onPickPersona={pickPersona} presentationMode={presentationMode} onTogglePresentationMode={() => setPresentationMode((value) => !value)} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
-        {view === 'calendar' && <YearCalendar tasks={tasks} holidayDates={holidayDates} onAddTasks={appendTasks} onLoadSampleDemoData={loadSampleDemoData} onDeleteGroup={deleteTaskGroup} onMoveTask={moveTaskToDate} onUpdateTask={updateTask} />}
+        {view === 'calendar' && <YearCalendar tasks={tasks} holidayDates={holidayDates} personaCopy={personaMode ? PERSONA_COPY[personaMode] : undefined} onAddTasks={appendTasks} onLoadSampleDemoData={loadSampleDemoData} onDeleteGroup={deleteTaskGroup} onMoveTask={moveTaskToDate} onUpdateTask={updateTask} />}
+        {view === 'structure' && (
+          <main className="h-screen overflow-y-auto">
+            <div className="mx-auto w-full max-w-7xl space-y-6 p-6 pb-28 md:p-10">
+              <PageHeader
+                title="업무 구조도"
+                subtitle={personaMode === 'receiver'
+                  ? '전임자의 카드를 업무 > 세부업무 > 단계 흐름으로 파악합니다. 미분류 카드를 드래그해 정리하세요'
+                  : '구조도 1장이 곧 인수인계서입니다. 미분류 카드를 드래그해 세부업무를 만들고 업무로 묶으세요'}
+              />
+              <StructureBoard tasks={tasks} onMoveCard={moveStructureCard} onRenameGroup={renameStructureGroup} onAssignJob={assignJobToGroup} onGoToCalendar={() => navigate('calendar')} />
+            </div>
+          </main>
+        )}
         {view === 'archive' && <ArchiveScreen tasks={tasks} bundlePmiMemos={bundlePmiMemos} holidayDates={holidayDates} focusedGroupName={archiveGroupFocus} onClearFocusedGroup={() => setArchiveGroupFocus(null)} onDeleteTask={deleteTask} onUpdateTask={updateTask} onUpdateBundlePmiMemos={(next) => saveLocalData(tasks, memos, '업무묶음 Plus/Minus 메모가 저장되었습니다', next)} />}
         {view === 'export' && (
           <ExportScreen
@@ -303,17 +415,68 @@ export function App() {
   );
 }
 
-function AppSidebar({ active, presentationMode, onTogglePresentationMode, onNavigate }: { active: View; presentationMode: boolean; onTogglePresentationMode: () => void; onNavigate: (view: View) => void }) {
+function PersonaOnboarding({ onPick }: { onPick: (mode: PersonaMode) => void }) {
+  const firstOptionRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    // 첫 진입 모달이므로 열릴 때 첫 선택지로 포커스를 옮겨 키보드/스크린리더
+    // 사용자가 바로 제목·선택지를 인지하고 조작할 수 있게 한다.
+    firstOptionRef.current?.focus();
+  }, []);
+  return (
+    <div role="dialog" aria-modal="true" aria-label="시작 모드 선택" className="fixed inset-0 z-[60] flex items-center justify-center bg-background/95 p-6 backdrop-blur-sm">
+      <div className="w-full max-w-2xl border border-border bg-surface p-8 shadow-2xl">
+        <h2 className="flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight">
+          <span className="size-3 bg-ember" aria-hidden />
+          모두의 인수인계
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">공문을 카드로 뽑아 업무 &gt; 세부업무 &gt; 단계 흐름으로 정리합니다. 지금 어느 쪽인가요? (나중에 사이드바에서 바꿀 수 있어요)</p>
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          {(['giver', 'receiver'] as const).map((mode, index) => (
+            <button
+              key={mode}
+              ref={index === 0 ? firstOptionRef : undefined}
+              type="button"
+              onClick={() => onPick(mode)}
+              aria-label={`${PERSONA_COPY[mode].label} 모드로 시작`}
+              className="border border-border bg-background p-5 text-left transition-colors hover:border-ember focus:border-ember focus:outline-none focus-visible:ring-2 focus-visible:ring-ember"
+            >
+              <p className="font-mono text-[11px] uppercase tracking-widest text-ember">{PERSONA_COPY[mode].label}</p>
+              <p className="mt-1 font-display text-lg font-bold">{PERSONA_COPY[mode].toggleLabel}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{PERSONA_COPY[mode].oneLiner}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppSidebar({ active, personaMode, unclassifiedCount, onPickPersona, presentationMode, onTogglePresentationMode, onNavigate }: { active: View; personaMode: PersonaMode | null; unclassifiedCount: number; onPickPersona: (mode: PersonaMode) => void; presentationMode: boolean; onTogglePresentationMode: () => void; onNavigate: (view: View) => void }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-background p-6 md:flex">
-      <div className="mb-12">
+      <div className="mb-8">
         <button className="block text-left" onClick={() => onNavigate('calendar')}>
           <h1 className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight">
             <span className="size-3 bg-ember" aria-hidden />
             모두의 인수인계
           </h1>
-          <p className="mt-1 text-xs text-muted-foreground">공문 기반 캘린더</p>
+          <p className="mt-1 text-xs text-muted-foreground">공문 기반 인수인계·캘린더</p>
         </button>
+        <div className="mt-4 grid grid-cols-2 gap-1 border border-border bg-surface p-1" role="group" aria-label="인계자 인수자 모드 전환">
+          {(['giver', 'receiver'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onPickPersona(mode)}
+              aria-pressed={personaMode === mode}
+              title={PERSONA_COPY[mode].toggleLabel}
+              className={'px-2 py-1.5 text-xs font-semibold transition-colors ' + (personaMode === mode ? 'bg-ember text-ember-foreground' : 'text-muted-foreground hover:text-foreground')}
+            >
+              {PERSONA_COPY[mode].label}
+            </button>
+          ))}
+        </div>
+        {personaMode ? <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{PERSONA_COPY[personaMode].toggleLabel}</p> : null}
       </div>
       <nav className="flex-1 space-y-1" aria-label="주요 화면">
         {navItems.map((item) => {
@@ -330,6 +493,11 @@ function AppSidebar({ active, presentationMode, onTogglePresentationMode, onNavi
             >
               <Icon className="size-4" />
               {item.label}
+              {item.id === 'structure' && unclassifiedCount > 0 ? (
+                <span aria-label={`미분류 ${unclassifiedCount}건`} className="ml-auto rounded-full border border-ember/50 bg-ember-soft px-1.5 py-0.5 font-mono text-[11px] font-bold text-ember">
+                  {unclassifiedCount}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -345,7 +513,11 @@ function AppSidebar({ active, presentationMode, onTogglePresentationMode, onNavi
 
 function MobileBottomNav({ active, onNavigate }: { active: View; onNavigate: (view: View) => void }) {
   return (
-    <nav aria-label="모바일 주요 화면" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-border bg-background/95 p-2 shadow-2xl backdrop-blur md:hidden">
+    <nav
+      aria-label="모바일 주요 화면"
+      className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-background/95 p-2 shadow-2xl backdrop-blur md:hidden"
+      style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = active === item.id;
@@ -357,7 +529,7 @@ function MobileBottomNav({ active, onNavigate }: { active: View; onNavigate: (vi
             aria-label={`모바일 ${item.label} 탭`}
             aria-current={isActive ? 'page' : undefined}
             className={
-              'flex flex-col items-center justify-center gap-1 rounded-sm px-2 py-2 text-[11px] font-semibold transition-colors ' +
+              'flex min-h-12 flex-col items-center justify-center gap-1 rounded-sm px-1 py-2 text-[11px] font-semibold transition-colors ' +
               (isActive ? 'bg-ember-soft text-ember' : 'text-muted-foreground hover:bg-surface hover:text-foreground')
             }
           >
@@ -681,6 +853,7 @@ function AnnualFlowBoard({
 function YearCalendar({
   tasks,
   holidayDates,
+  personaCopy,
   onAddTasks,
   onLoadSampleDemoData,
   onDeleteGroup,
@@ -689,6 +862,7 @@ function YearCalendar({
 }: {
   tasks: Task[];
   holidayDates: ReadonlySet<string>;
+  personaCopy?: import('./persona').PersonaCopy;
   onAddTasks: (tasks: NewTaskInput[]) => Task[];
   onLoadSampleDemoData: () => void;
   onDeleteGroup: (groupName: string) => void;
@@ -915,7 +1089,7 @@ function YearCalendar({
             </div>
           </div>
         ) : null}
-        <IntakeBundleSection tasks={tasks} onAddTasks={onAddTasks} onLoadSampleDemoData={onLoadSampleDemoData} onDeleteGroup={onDeleteGroup} />
+        <IntakeBundleSection tasks={tasks} onAddTasks={onAddTasks} onLoadSampleDemoData={onLoadSampleDemoData} onDeleteGroup={onDeleteGroup} personaCopy={personaCopy} />
         <AnnualFlowBoard
           months={annualFlow.monthsFlow}
           bundles={annualFlow.bundles}

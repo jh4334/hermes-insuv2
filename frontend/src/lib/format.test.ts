@@ -87,13 +87,13 @@ describe('format helpers', () => {
 
   it('summarizes PDF extraction results with next actions while keeping successes addable', () => {
     expect(pdfExtractionSummaryMessage(2, [extractedFile, { ...extractedFile, fileName: 'scan.pdf', status: '텍스트 없음 - 수동 입력', evidence: '텍스트 없음' }])).toBe(
-      '2개 후보 추출 완료 · 업무묶음 이름을 정한 뒤 달력에 추가하세요',
+      '2개 후보 추출 완료 · 자동 분류 제안을 확인한 뒤 추가하세요',
     );
     expect(pdfExtractionSummaryMessage(1, [{ ...extractedFile, status: '텍스트 없음 - 수동 입력', evidence: '텍스트 없음' }])).toBe(
       '1개 후보 추출 완료 · 스캔 PDF이거나 텍스트가 없는 파일이에요 · 직접 입력하기를 사용할 수 있어요',
     );
     expect(pdfExtractionSummaryMessage(1, [extractedFile])).toBe(
-      '1개 후보 추출 완료 · 업무묶음 이름을 정한 뒤 달력에 추가하세요',
+      '1개 후보 추출 완료 · 자동 분류 제안을 확인한 뒤 추가하세요',
     );
   });
 
@@ -208,13 +208,13 @@ Interesting: 지역 기관과 연계 가능
       {
         groupName: '계기교육',
         groupColor: '#2563eb',
-        counts: { 계획: 0, 품의: 0, 결과보고: 1 },
+        counts: { 계획: 0, '심의·협의': 0, 품의: 0, 결과보고: 1 },
         hasMissingResultReport: false,
       },
       {
         groupName: '안전',
         groupColor: '#dc2626',
-        counts: { 계획: 1, 품의: 1, 결과보고: 0 },
+        counts: { 계획: 1, '심의·협의': 0, 품의: 1, 결과보고: 0 },
         hasMissingResultReport: true,
       },
     ]);

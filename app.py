@@ -169,10 +169,28 @@ def uploaded_file_has_pdf_header(uploaded_file) -> bool:
     return head == b"%PDF-"
 
 
+MAX_UPLOAD_BYTES = 64 * 1024 * 1024  # 요청 전체 상한 (멀티파트 포함) — 로컬 서버 메모리 보호
+MAX_UPLOAD_FILES = 60  # 한 번에 처리할 PDF 개수 상한
+
+
 def create_app(frontend_dist: str | Path | None = None, prefer_react: bool = False) -> Flask:
     app = Flask(__name__)
+    # 거대한 업로드로 로컬 서버 메모리가 고갈되지 않도록 요청 크기를 제한한다.
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     frontend_dist_path = Path(frontend_dist) if frontend_dist is not None else Path(__file__).parent / "frontend" / "dist"
     serve_react = prefer_react and (frontend_dist_path / "index.html").exists()
+
+    @app.errorhandler(413)
+    def handle_too_large(_error):
+        return (
+            jsonify(
+                {
+                    "error": "request_too_large",
+                    "messages": [f"업로드 용량이 너무 큽니다. 전체 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB 이하로 나눠 올려 주세요."],
+                }
+            ),
+            413,
+        )
 
     @app.get("/health")
     def health():
@@ -207,6 +225,8 @@ def create_app(frontend_dist: str | Path | None = None, prefer_react: bool = Fal
         non_pdf_files = [file.filename for file in files if file.filename.lower().endswith(".pdf") and not uploaded_file_has_pdf_header(file)]
         if not files:
             messages.append("PDF 파일을 1개 이상 선택하세요.")
+        if len(files) > MAX_UPLOAD_FILES:
+            messages.append(f"한 번에 최대 {MAX_UPLOAD_FILES}개까지만 올릴 수 있습니다. 나눠서 올려 주세요.")
         if invalid_files:
             messages.append("PDF 파일만 업로드할 수 있습니다: " + ", ".join(invalid_files))
         if non_pdf_files:
@@ -226,6 +246,32 @@ def create_app(frontend_dist: str | Path | None = None, prefer_react: bool = Fal
                 "analysis": analysis_payload(document_lines, target_year),
             }
         )
+
+    @app.post("/api/classify-llm")
+    def api_classify_llm():
+        from hermes_insu.llm_classify import (
+            MAX_TITLES,
+            LlmClassifyError,
+            LlmUnavailableError,
+            classify_titles,
+        )
+
+        data = request_json_payload()
+        if not isinstance(data, dict):
+            return jsonify({"error": "invalid_request", "messages": ["Request body must be a JSON object."]}), 400
+        titles = data.get("titles")
+        if not isinstance(titles, list) or not all(isinstance(title, str) for title in titles):
+            return jsonify({"error": "invalid_request", "messages": ["titles must be a list of strings."]}), 400
+        if len(titles) > MAX_TITLES:
+            return jsonify({"error": "invalid_request", "messages": [f"titles must contain at most {MAX_TITLES} items."]}), 400
+
+        try:
+            results = classify_titles(titles)
+        except LlmUnavailableError as exc:
+            return jsonify({"error": "llm_unavailable", "message": str(exc)}), 503
+        except LlmClassifyError as exc:
+            return jsonify({"error": "llm_failed", "message": str(exc)}), 502
+        return jsonify({"contractVersion": "classify-llm.v1", "results": results})
 
     @app.post("/api/export")
     def api_export():

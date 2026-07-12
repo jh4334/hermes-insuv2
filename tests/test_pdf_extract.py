@@ -375,3 +375,39 @@ def test_extract_department_ignores_body_buseo_and_cheorigwa_suffixes_before_doc
         row = extract_document_row_from_text(text, "sanitized-department-guard.pdf")
 
         assert row["department"] == "교무기획부"
+
+
+def test_batch_isolates_a_failing_file(monkeypatch):
+    from io import BytesIO
+    from hermes_insu import pdf_extract
+
+    calls = {"n": 0}
+    real = pdf_extract.extract_document_row_from_bytes
+
+    def flaky(data, file_name, document_type="draft"):
+        calls["n"] += 1
+        if "bad" in file_name:
+            raise RuntimeError("boom")
+        return real(data, file_name, document_type=document_type)
+
+    monkeypatch.setattr(pdf_extract, "extract_document_row_from_bytes", flaky)
+
+    files = [
+        _named_stream(b"%PDF-1.4 good", "good1.pdf"),
+        _named_stream(b"%PDF-1.4 bad", "bad.pdf"),
+        _named_stream(b"%PDF-1.4 good", "good2.pdf"),
+    ]
+    rows = pdf_extract.convert_uploaded_pdfs_to_document_rows(files)
+    assert len(rows) == 3
+    statuses = {r["file_name"]: r["extract_status"] for r in rows}
+    assert "추출 실패" in statuses["bad.pdf"]
+    # 정상 파일 2건은 실패로 오염되지 않는다.
+    assert "추출 실패" not in statuses["good1.pdf"]
+    assert "추출 실패" not in statuses["good2.pdf"]
+
+
+def _named_stream(data: bytes, name: str):
+    from io import BytesIO
+    stream = BytesIO(data)
+    stream.filename = name
+    return stream

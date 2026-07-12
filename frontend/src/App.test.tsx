@@ -7,6 +7,7 @@ import { App } from './App';
 const TASKS_KEY = 'handover:tasks:v2';
 const BUNDLE_PMI_KEY = 'handover:bundle-pmi-memos:v1';
 const SNAPSHOT_KEY = 'handover:local-snapshot:v1';
+const PERSONA_KEY = 'handover:persona:v1';
 const storage = new Map<string, string>();
 Object.defineProperty(globalThis, 'localStorage', {
   value: {
@@ -238,9 +239,17 @@ async function uploadSamplePdfToBoard(groupName = '계기교육') {
   fireEvent.change(screen.getByLabelText(/PDF 공문 파일 선택/i), {
     target: { files: [new File(['%PDF-1.4'], '테스트공문.pdf', { type: 'application/pdf' })] },
   });
-  fireEvent.change(await screen.findByLabelText(/업무묶음 이름 입력/i), { target: { value: groupName } });
-  fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
-  await waitFor(() => expect(screen.queryByText(/추출된 후보 1건/i)).not.toBeInTheDocument());
+  fireEvent.click(await screen.findByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+  await confirmClassifyReview({ renameFirstBucketTo: groupName, confirmLabel: /1건 일괄 확인/i });
+}
+
+async function confirmClassifyReview({ renameFirstBucketTo, confirmLabel }: { renameFirstBucketTo?: string; confirmLabel: RegExp }) {
+  expect(await screen.findByText(/이렇게 나눴어요/i)).toBeInTheDocument();
+  if (renameFirstBucketTo !== undefined) {
+    fireEvent.change(screen.getAllByLabelText(/묶음 이름 수정/i)[0], { target: { value: renameFirstBucketTo } });
+  }
+  fireEvent.click(screen.getByRole('button', { name: confirmLabel }));
+  await waitFor(() => expect(screen.queryByText(/이렇게 나눴어요/i)).not.toBeInTheDocument());
 }
 
 function seedTasksForCalendar(tasks: Array<Partial<Record<string, unknown>>>) {
@@ -317,6 +326,7 @@ describe('team-handoff frontend replacement', () => {
   beforeEach(() => {
     vi.useRealTimers();
     localStorage.clear();
+    storage.set(PERSONA_KEY, 'receiver');
     vi.restoreAllMocks();
   });
 
@@ -359,20 +369,21 @@ describe('team-handoff frontend replacement', () => {
     expect(mainSource).toContain('text-[#2b1d18]');
   });
 
-  it('opens directly to a calendar-first 3-item navigation with PDF upload and opt-in sample demo', () => {
+  it('opens directly to a calendar-first navigation with PDF upload, structure view, and opt-in sample demo', () => {
     render(<App />);
 
     expect(JSON.parse(storage.get(SNAPSHOT_KEY) ?? '{"tasks":[]}').tasks).toHaveLength(0);
     expect(screen.getByRole('heading', { name: /모두의 인수인계/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /연간 캘린더/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^캘린더$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^구조도$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^업무목록$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^내보내기$/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /대시보드/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /월간 캘린더/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /간트차트/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^메모$/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/공문 PDF 업로드/i)).toBeInTheDocument();
+    expect(screen.getByText(/작년 공문 업로드/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /샘플 데이터로 둘러보기/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/실제 학교·교사·학생 정보가 없는 가상 데이터/i)).toBeInTheDocument();
     expect(screen.queryByText(/Doc → Calendar/i)).not.toBeInTheDocument();
@@ -527,7 +538,7 @@ describe('team-handoff frontend replacement', () => {
     expect(snapshot.tasks[0].title).toBe('가져온 업무');
   });
 
-  it('prefills a suggested group name so extracted PDF tasks can be added without required typing', async () => {
+  it('clusters extracted PDF tasks into a suggested 세부업무 bucket so no group typing is required', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(fieldTripExtractPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     render(<App />);
 
@@ -535,18 +546,17 @@ describe('team-handoff frontend replacement', () => {
       target: { files: [new File(['%PDF-1.4'], '현장체험.pdf', { type: 'application/pdf' })] },
     });
 
-    expect(await screen.findByText(/업무묶음 이름 제안: 현장체험학습/i)).toBeInTheDocument();
-    expect(screen.getByText(/교사가 수정 가능/i)).toBeInTheDocument();
-    expect(screen.queryByText(/AI가 자동 분류/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/AI 추천/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/1번 후보 업무명/i)).toBeInTheDocument();
-    const groupInput = screen.getByLabelText(/업무묶음 이름 입력/i) as HTMLInputElement;
-    expect(groupInput.value).toBe('현장체험학습');
-    const addButton = screen.getByRole('button', { name: /2건 보드에 추가/i });
-    expect(addButton).toBeEnabled();
-    fireEvent.click(addButton);
+    expect(await screen.findByLabelText(/1번 후보 업무명/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/업무묶음 이름 입력/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /2건 자동 분류 제안 보기/i }));
 
-    await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
+    expect(await screen.findByText(/이렇게 나눴어요/i)).toBeInTheDocument();
+    const bucketInput = screen.getAllByLabelText(/묶음 이름 수정/i)[0] as HTMLInputElement;
+    expect(bucketInput.value).toBe('현장체험학습');
+    expect(screen.getByText(/자동 묶음/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /2건 일괄 확인/i }));
+
+    await waitFor(() => expect(screen.queryByText(/이렇게 나눴어요/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
     expect(storedTasks).toHaveLength(2);
     expect(storedTasks).toEqual([
@@ -571,10 +581,8 @@ describe('team-handoff frontend replacement', () => {
     expect(await screen.findByText(/발신기관을 읽고 있습니다/i)).toBeInTheDocument();
     expect(await screen.findByLabelText(/1번 후보 발신기관/i)).toHaveValue('충청북도교육청');
     expect(screen.getByText(/발신기관 충청북도교육청/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/업무묶음 이름 입력/i), { target: { value: '수련활동' } });
-    fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
-
-    await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: '수련활동', confirmLabel: /1건 일괄 확인/i });
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
     expect(storedTasks).toEqual([
       expect.objectContaining({
@@ -587,7 +595,7 @@ describe('team-handoff frontend replacement', () => {
     ]);
   });
 
-  it('lets teachers choose an existing group chip instead of typing the group name', async () => {
+  it('lets teachers merge a suggested bucket into an existing group instead of typing the group name', async () => {
     storage.set(SNAPSHOT_KEY, JSON.stringify({
       schemaVersion: 1,
       exportedAt: '2026-06-30T00:00:00.000Z',
@@ -619,12 +627,12 @@ describe('team-handoff frontend replacement', () => {
       target: { files: [new File(['%PDF-1.4'], '현장체험.pdf', { type: 'application/pdf' })] },
     });
 
-    expect(await screen.findByText(/업무묶음 이름 제안: 현장체험학습/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /기존 묶음 교육과정 선택/i }));
-    expect(screen.getByLabelText<HTMLInputElement>(/업무묶음 이름 입력/i).value).toBe('교육과정');
-    fireEvent.click(screen.getByRole('button', { name: /2건 보드에 추가/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /2건 자동 분류 제안 보기/i }));
+    expect(await screen.findByText(/이렇게 나눴어요/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/현장체험학습 묶음 병합 대상 선택/i), { target: { value: '교육과정' } });
+    fireEvent.click(screen.getByRole('button', { name: /2건 일괄 확인/i }));
 
-    await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/이렇게 나눴어요/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
     expect(storedTasks.slice(1)).toEqual([
       expect.objectContaining({ group_name: '교육과정', group_color: '#2563eb' }),
@@ -663,10 +671,9 @@ it('appends an extracted PDF batch and gives every new task the same unused visi
     fireEvent.change(screen.getByLabelText(/PDF 공문 파일 선택/i), {
       target: { files: [new File(['%PDF-1.4'], '첫번째.pdf', { type: 'application/pdf' }), new File(['%PDF-1.4'], '두번째.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.change(await screen.findByLabelText(/업무묶음 이름 입력/i), { target: { value: '계기교육' } });
-    fireEvent.click(screen.getByRole('button', { name: /2건 보드에 추가/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /2건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: '계기교육', confirmLabel: /2건 일괄 확인/i });
 
-    await waitFor(() => expect(screen.queryByText(/추출된 후보 2건/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
     expect(storedTasks).toHaveLength(3);
     expect(storedTasks[0]).toEqual(expect.objectContaining({ id: 'existing-task', group_name: '교육과정', group_color: '#2563eb' }));
@@ -711,10 +718,9 @@ it('appends an extracted PDF batch and gives every new task the same unused visi
     fireEvent.change(screen.getByLabelText(/PDF 공문 파일 선택/i), {
       target: { files: [new File(['%PDF-1.4'], '교육과정추가.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.change(await screen.findByLabelText(/업무묶음 이름 입력/i), { target: { value: ' 교육과정 ' } });
-    fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: ' 교육과정 ', confirmLabel: /1건 일괄 확인/i });
 
-    await waitFor(() => expect(screen.queryByText(/추출된 후보 1건/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
     expect(storedTasks).toHaveLength(2);
     expect(storedTasks[1]).toEqual(expect.objectContaining({ group_name: '교육과정', group_color: '#2563eb' }));
@@ -738,8 +744,8 @@ it('appends an extracted PDF batch and gives every new task the same unused visi
     expect(await screen.findByText(/추출 결과 미리보기/i)).toBeInTheDocument();
     expect(screen.getByText(/파일별 분석 상태/i)).toBeInTheDocument();
     expect(screen.getByText(/업무지원과-0000/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/업무묶음 이름 입력/i), { target: { value: '계기교육' } });
-    fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
+    fireEvent.click(screen.getByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: '계기교육', confirmLabel: /1건 일괄 확인/i });
 
     await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
     showMonth(5);
@@ -763,8 +769,8 @@ it('appends an extracted PDF batch and gives every new task the same unused visi
     fireEvent.change(screen.getByLabelText(/1번 후보 문서번호/i), { target: { value: '수정-0001' } });
     fireEvent.change(screen.getByLabelText(/1번 후보 담당/i), { target: { value: '홍길동' } });
     expect(screen.queryByLabelText(/1번 후보 참고자료 위치/i)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/업무묶음 이름 입력/i), { target: { value: '안전교육' } });
-    fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
+    fireEvent.click(screen.getByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: '안전교육', confirmLabel: /1건 일괄 확인/i });
 
     await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
@@ -821,14 +827,13 @@ it('shows per-file upload states and keeps successful candidates when one PDF ne
       target: { files: [new File(['%PDF-1.4'], '정상.pdf', { type: 'application/pdf' }), new File(['%PDF-1.4'], '깨진파일.pdf', { type: 'application/pdf' })] },
     });
 
-    expect(await screen.findByText(/1개 후보 추출 완료 · 업무묶음 이름을 정한 뒤 달력에 추가하세요/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1개 후보 추출 완료 · 자동 분류 제안을 확인한 뒤 추가하세요/i)).toBeInTheDocument();
     const statusList = screen.getByRole('region', { name: /파일별 분석 상태/i });
     expect(within(statusList).getByText(/테스트공문\.pdf/i)).toBeInTheDocument();
     expect(within(statusList).getByText(/추출 완료/i)).toBeInTheDocument();
     expect(within(statusList).getByText(/깨진파일\.pdf/i)).toBeInTheDocument();
     expect(within(statusList).getByText(/추출 실패/i)).toBeInTheDocument();
-    expect(screen.getByText(/업무묶음 이름 제안/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /1건 보드에 추가/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /1건 자동 분류 제안 보기/i })).toBeEnabled();
   });
 
   it('normalizes legacy localStorage tasks without automatic category classification', () => {
@@ -1501,7 +1506,7 @@ it('shows PDF upload and bundle deletion side by side, then deletes one bundle o
     const bundleCard = within(uploadManager).getByLabelText(/업무묶음 관리 카드/i);
     expect(uploadCard).toHaveClass('h-full');
     expect(bundleCard).toHaveClass('h-full');
-    expect(within(uploadManager).getByRole('heading', { name: /공문 PDF 업로드/i })).toBeInTheDocument();
+    expect(within(uploadManager).getByRole('heading', { name: /작년 공문 업로드/i })).toBeInTheDocument();
     expect(within(uploadManager).getByText(/업무묶음 관리/i)).toBeInTheDocument();
     expect(within(uploadManager).getByText(/안전교육/i)).toBeInTheDocument();
     expect(within(uploadManager).getByText(/2건/i)).toBeInTheDocument();
@@ -2000,12 +2005,19 @@ it('shows text group labels across calendar and task list views', async () => {
     expect(workflow).toContain('npm run build');
   });
 
-  it('shows a mobile bottom tab bar that uses the same three navigation targets', () => {
+  it('shows a mobile bottom tab bar with one column per navigation target', () => {
     render(<App />);
 
     const mobileNav = screen.getByRole('navigation', { name: /모바일 주요 화면/i });
     expect(mobileNav).toHaveClass('md:hidden');
+    // The grid must have exactly one column per nav item — a fixed grid-cols-N
+    // would overflow when a tab is added (the 구조도 regression).
+    const tabButtons = within(mobileNav).getAllByRole('button');
+    expect(tabButtons).toHaveLength(4);
+    expect(mobileNav).not.toHaveClass('grid-cols-3');
+    expect(mobileNav.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
     expect(within(mobileNav).getByRole('button', { name: /모바일 캘린더 탭/i })).toHaveAttribute('aria-current', 'page');
+    expect(within(mobileNav).getByRole('button', { name: /모바일 구조도 탭/i })).toBeInTheDocument();
 
     fireEvent.click(within(mobileNav).getByRole('button', { name: /모바일 업무목록 탭/i }));
     expect(screen.getByRole('heading', { name: /^업무목록$/i })).toBeInTheDocument();
@@ -2086,8 +2098,8 @@ it('shows text group labels across calendar and task list views', async () => {
     fireEvent.change(screen.getByLabelText(/1번 후보 기안일/i), { target: { value: '2026-03-01' } });
     fireEvent.change(screen.getByLabelText(/1번 후보 문서번호/i), { target: { value: '직접-0001' } });
     fireEvent.change(screen.getByLabelText(/1번 후보 담당/i), { target: { value: '담당자 확인' } });
-    fireEvent.change(screen.getByLabelText(/업무묶음 이름 입력/i), { target: { value: '안전점검' } });
-    fireEvent.click(screen.getByRole('button', { name: /1건 보드에 추가/i }));
+    fireEvent.click(screen.getByRole('button', { name: /1건 자동 분류 제안 보기/i }));
+    await confirmClassifyReview({ renameFirstBucketTo: '안전점검', confirmLabel: /1건 일괄 확인/i });
 
     await waitFor(() => expect(screen.queryByText(/추출 결과 미리보기/i)).not.toBeInTheDocument());
     const storedTasks = JSON.parse(storage.get(TASKS_KEY) ?? '[]');
