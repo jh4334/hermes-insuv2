@@ -231,6 +231,12 @@ function writeStorageJson(key: string, value: unknown): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+export type PersistResult = {
+  readonly snapshot: LocalDataSnapshot;
+  /** localStorage 저장이 실제로 성공했는지. 실패(용량초과 등) 시 false. */
+  readonly persisted: boolean;
+};
+
 function snapshotFromUnknown(value: unknown): LocalDataSnapshot | null {
   if (!isRecord(value)) return null;
   if (value.schemaVersion !== LOCAL_SNAPSHOT_SCHEMA_VERSION) return null;
@@ -260,13 +266,27 @@ export function readLocalDataFromStorage(): LocalDataSnapshot {
   return snapshot;
 }
 
-export function writeLocalDataToStorage(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): LocalDataSnapshot {
+/**
+ * 스냅샷을 localStorage에 저장하되, 용량초과 등으로 실패해도 예외를 던지지 않고
+ * `persisted: false`로 알린다. 인메모리 상태는 호출부가 유지하므로 세션은 이어진다.
+ */
+export function persistLocalData(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): PersistResult {
   const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemosOrExportedAt, exportedAt);
-  writeStorageJson(LOCAL_SNAPSHOT_KEY, snapshot);
-  writeStorageJson(TASKS_KEY, snapshot.tasks);
-  writeStorageJson(MEMOS_KEY, snapshot.memos);
-  writeStorageJson(BUNDLE_PMI_MEMOS_KEY, snapshot.bundlePmiMemos);
-  return snapshot;
+  try {
+    writeStorageJson(LOCAL_SNAPSHOT_KEY, snapshot);
+    writeStorageJson(TASKS_KEY, snapshot.tasks);
+    writeStorageJson(MEMOS_KEY, snapshot.memos);
+    writeStorageJson(BUNDLE_PMI_MEMOS_KEY, snapshot.bundlePmiMemos);
+    return { snapshot, persisted: true };
+  } catch (_error) {
+    // 저장 실패(QuotaExceededError, 사생활 보호 모드 등). 데이터를 잃지 않도록
+    // 예외는 삼키고 호출부가 사용자에게 안내하도록 신호만 돌려준다.
+    return { snapshot, persisted: false };
+  }
+}
+
+export function writeLocalDataToStorage(tasks: Task[], memos: Memo[], bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [], exportedAt = new Date().toISOString()): LocalDataSnapshot {
+  return persistLocalData(tasks, memos, bundlePmiMemosOrExportedAt, exportedAt).snapshot;
 }
 
 export function parseLocalBackupText(text: string): BackupImportResult {

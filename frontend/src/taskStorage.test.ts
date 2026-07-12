@@ -6,6 +6,7 @@ import {
   normalizeStoredBundlePmiMemos,
   normalizeStoredTasks,
   parseLocalBackupText,
+  persistLocalData,
 } from './taskStorage';
 import type { BundlePmiMemo, Memo, Task } from './taskStorage';
 
@@ -226,5 +227,41 @@ describe('job hierarchy in the handoff markdown', () => {
     expect(markdown).toContain('- 업무 미지정: 독서교육');
     expect(markdown.indexOf('- 계기교육: 통일')).toBeLessThan(markdown.indexOf('- 업무 미지정: 독서교육'));
     expect(markdown).toContain('- 소속 업무: 계기교육');
+  });
+});
+
+describe('persistLocalData failure handling', () => {
+  it('returns persisted:false without throwing when setItem fails (quota exceeded)', () => {
+    const original = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: {
+        getItem: () => null,
+        setItem: () => { throw new DOMException('quota', 'QuotaExceededError'); },
+        removeItem: () => {},
+        clear: () => {},
+      },
+      configurable: true,
+    });
+    try {
+      const result = persistLocalData([], [], []);
+      expect(result.persisted).toBe(false);
+      expect(result.snapshot.schemaVersion).toBe(1);
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: original, configurable: true });
+    }
+  });
+
+  it('returns persisted:true on a normal write', () => {
+    const store = new Map<string, string>();
+    const original = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: () => {}, clear: () => store.clear() },
+      configurable: true,
+    });
+    try {
+      expect(persistLocalData([], [], []).persisted).toBe(true);
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: original, configurable: true });
+    }
   });
 });

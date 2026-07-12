@@ -47,8 +47,8 @@ import {
   buildSuccessorHandoffMarkdown,
   createLocalDataSnapshot,
   normalizeStoredBundlePmiMemos,
+  persistLocalData,
   readLocalDataFromStorage,
-  writeLocalDataToStorage,
 } from './taskStorage';
 import type { BundlePmiMemo, LocalDataSnapshot, Memo, Task } from './taskStorage';
 import { ExportScreen } from './components/ExportScreen';
@@ -145,11 +145,18 @@ export function App() {
 
   function saveLocalData(nextTasks: Task[], nextMemos: Memo[], status: string, nextBundlePmiMemos = bundlePmiMemos) {
     const normalizedBundlePmiMemos = normalizeStoredBundlePmiMemos(nextBundlePmiMemos, nextTasks);
-    writeLocalDataToStorage(nextTasks, nextMemos, normalizedBundlePmiMemos);
+    const { persisted } = persistLocalData(nextTasks, nextMemos, normalizedBundlePmiMemos);
+    // 저장이 실패해도(용량초과 등) 인메모리 상태는 갱신해 세션을 이어가되,
+    // 새로고침 시 유실될 수 있음을 명확히 안내한다.
     setTasks(nextTasks);
     setMemos(nextMemos);
     setBundlePmiMemos(normalizedBundlePmiMemos);
-    setStorageStatus(status);
+    if (persisted) {
+      setStorageStatus(status);
+    } else {
+      setStorageStatus('저장 공간이 부족해 이 기기에 저장하지 못했습니다');
+      toast.error('저장 공간이 부족해 변경 사항을 저장하지 못했어요. 내보내기에서 백업을 내려받고 오래된 데이터를 정리해 주세요.', { duration: 8000 });
+    }
   }
 
   function captureUndo(label: string) {
