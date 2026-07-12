@@ -76,6 +76,30 @@ export function ClassifyReviewDialog({
     setBuckets((current) => current.map((bucket) => (bucket.id === id ? { ...bucket, jobName: jobName.trim() || null } : bucket)));
   }
 
+  function moveCard(fromId: number, cardIndex: number, targetName: string) {
+    const target = targetName.trim();
+    if (!target) return;
+    setBuckets((current) => {
+      const withoutCard = current.map((bucket) =>
+        bucket.id === fromId ? { ...bucket, cardIndexes: bucket.cardIndexes.filter((index) => index !== cardIndex) } : bucket,
+      );
+      const targetBucket = withoutCard.find((bucket) => bucket.name.trim() === target);
+      const moved = targetBucket
+        ? withoutCard.map((bucket) => (bucket.id === targetBucket.id ? { ...bucket, cardIndexes: [...bucket.cardIndexes, cardIndex] } : bucket))
+        : [
+            ...withoutCard,
+            {
+              id: Math.max(0, ...withoutCard.map((bucket) => bucket.id)) + 1,
+              name: target,
+              jobName: null,
+              source: (target === UNCLASSIFIED_GROUP_NAME ? 'unclassified' : 'cluster') as GroupSource,
+              cardIndexes: [cardIndex],
+            },
+          ];
+      return moved.filter((bucket) => bucket.cardIndexes.length > 0);
+    });
+  }
+
   function mergeBucket(fromId: number, target: string) {
     setBuckets((current) => {
       const from = current.find((bucket) => bucket.id === fromId);
@@ -163,11 +187,29 @@ export function ClassifyReviewDialog({
                     const task = tasks[index];
                     const card = classification.cards[index];
                     if (!task) return null;
+                    const cardMoveTargets = [
+                      ...new Set([
+                        ...buckets.filter((other) => other.id !== bucket.id).map((other) => other.name.trim()),
+                        ...existingGroupNames,
+                        UNCLASSIFIED_GROUP_NAME,
+                      ]),
+                    ].filter((name) => name && name !== bucket.name.trim());
                     return (
                       <li key={index} className="flex items-center gap-2 text-xs text-foreground">
                         <span className="inline-flex w-16 shrink-0 justify-center rounded-full border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{card?.stage ?? '단계미정'}</span>
                         <span className="truncate" title={task.title}>{task.title}</span>
                         <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">{task.start_date}</span>
+                        {cardMoveTargets.length > 0 ? (
+                          <select
+                            aria-label={`${task.title} 카드 이동 대상 선택`}
+                            value=""
+                            onChange={(event) => { if (event.target.value) moveCard(bucket.id, index, event.target.value); }}
+                            className="shrink-0 border border-border bg-surface px-1 py-0.5 text-[11px] text-muted-foreground outline-none focus:border-ember"
+                          >
+                            <option value="">이동…</option>
+                            {cardMoveTargets.map((name) => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                        ) : null}
                       </li>
                     );
                   })}
