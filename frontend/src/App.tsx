@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { TaskGroupPill } from './TaskGroupControls';
 import { buildGroupHandoffDocx } from './exportDocx';
 import { loadKoreanPublicHolidays } from './holidayCalendar';
+import { readOnlineHolidaysEnabled } from './settings';
 import {
   buildCalendarMonths,
   buildMonthGridDates,
@@ -131,7 +132,7 @@ export function App() {
       setHolidayDates(new Set());
       return () => { cancelled = true; };
     }
-    loadKoreanPublicHolidays(holidayYears)
+    loadKoreanPublicHolidays(holidayYears, { online: readOnlineHolidaysEnabled() })
       .then((calendar) => {
         if (cancelled) return;
         setHolidayDates(calendar.dates);

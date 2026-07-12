@@ -127,9 +127,11 @@ function fixedHolidayDatesForYear(year: number): string[] {
 
 export async function loadKoreanPublicHolidays(
   years: readonly number[],
-  options: { fetchImpl?: typeof fetch; storage?: Storage } = {},
+  options: { fetchImpl?: typeof fetch; storage?: Storage; online?: boolean } = {},
 ): Promise<HolidayCalendar> {
-  const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  // offline-first: online이 false면 외부 API를 호출하지 않고 캐시+고정공휴일만 사용한다.
+  const online = options.online ?? true;
+  const fetchImpl = online ? (options.fetchImpl ?? globalThis.fetch?.bind(globalThis)) : undefined;
   const storage = options.storage ?? globalThis.localStorage;
   const uniqueYears = Array.from(new Set(years.filter((year) => Number.isInteger(year) && year >= 1900 && year <= 2200))).sort();
   const dates = new Set<string>();

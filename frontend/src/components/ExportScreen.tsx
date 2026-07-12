@@ -2,6 +2,7 @@ import { ChangeEvent, useRef, useState } from 'react';
 import { Download, FileText, Loader2, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { readOnlineLlmEnabled, writeOnlineLlmEnabled } from '../classify/llm';
+import { readOnlineHolidaysEnabled, writeOnlineHolidaysEnabled } from '../settings';
 import { readRuleMemory, writeRuleMemory } from '../classify/ruleMemory';
 import { countSuccessorMemos, parsePmiMemo } from '../lib/format';
 import { normalizeTaskGroupName } from '../taskGroups';
@@ -216,6 +217,8 @@ function LocalDataPanel({
 
       <OnlineLlmPanel />
 
+      <OnlineHolidaysPanel />
+
       <div className="border border-destructive/30 bg-surface p-4" aria-label="위험 작업">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
           <div>
@@ -323,6 +326,40 @@ function OnlineLlmPanel() {
           role="switch"
           aria-checked={enabled}
           aria-label="온라인 LLM 분류 사용"
+          onClick={() => toggle(!enabled)}
+          className={'shrink-0 border px-4 py-2 text-xs font-semibold transition-colors ' + (enabled ? 'border-ember bg-ember text-ember-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground')}
+        >
+          {enabled ? '켜짐 · 동의함' : '꺼짐'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OnlineHolidaysPanel() {
+  const [enabled, setEnabled] = useState(() => readOnlineHolidaysEnabled());
+
+  function toggle(next: boolean) {
+    writeOnlineHolidaysEnabled(next);
+    setEnabled(next);
+    toast.success(next ? '온라인 공휴일 조회를 켰습니다 — 캘린더를 새로고침하면 반영됩니다' : '온라인 공휴일 조회를 껐습니다');
+  }
+
+  return (
+    <div className="border border-border bg-surface p-4" aria-label="공휴일 조회 설정">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div>
+          <h3 className="font-display text-base font-semibold">공휴일 온라인 조회 (선택)</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            기본값은 꺼짐입니다. 꺼져 있으면 <strong className="text-foreground">고정 공휴일</strong>(신정·삼일절·어린이날 등)만 표시하고 외부 인터넷을 쓰지 않습니다.
+            설날·추석 같은 음력 공휴일과 대체공휴일까지 정확히 표시하려면 켜세요(연도·국가 코드만 외부에 전송, 개인정보 없음).
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="공휴일 온라인 조회 사용"
           onClick={() => toggle(!enabled)}
           className={'shrink-0 border px-4 py-2 text-xs font-semibold transition-colors ' + (enabled ? 'border-ember bg-ember text-ember-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground')}
         >

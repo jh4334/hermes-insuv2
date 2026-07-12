@@ -76,3 +76,26 @@ describe('Korean public holiday calendar', () => {
     expect(dateReviewSuggestion('2026-02-16', holidays)?.detail).toContain('2026-02-13');
   });
 });
+
+describe('loadKoreanPublicHolidays offline-first opt-out', () => {
+  beforeEach(() => {
+    storage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('does not call the network when online is false, falling back to fixed holidays', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const result = await loadKoreanPublicHolidays([2026], { fetchImpl, storage: fakeStorage, online: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.statusByYear[2026]).toBe('fixed-fallback');
+    // 고정 공휴일이 포함되어 있어야 한다(신정).
+    expect(result.dates.has('2026-01-01')).toBe(true);
+  });
+
+  it('uses cached dates when online is false and a cache exists', async () => {
+    fakeStorage.setItem(`${KOREAN_HOLIDAY_CACHE_PREFIX}2026`, JSON.stringify({ dates: ['2026-02-17'], cachedAt: new Date(0).toISOString() }));
+    const result = await loadKoreanPublicHolidays([2026], { storage: fakeStorage, online: false });
+    expect(result.statusByYear[2026]).toBe('cache-hit');
+    expect(result.dates.has('2026-02-17')).toBe(true);
+  });
+});
