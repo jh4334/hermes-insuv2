@@ -13,6 +13,7 @@ import os
 
 MODEL = "claude-opus-4-8"
 MAX_TITLES = 200
+MAX_TITLE_LEN = 300  # 공문 제목 한 건의 최대 길이 — 남용/초대형 페이로드 방지
 STAGES = ["계획", "심의·협의", "품의", "결과보고"]
 
 RESULT_SCHEMA = {
@@ -70,7 +71,8 @@ def _default_client():
 def classify_titles(titles: list[str], client=None) -> list[dict]:
     """제목 목록을 분류해 [{index, job, group, stage}, ...]를 돌려준다."""
     # 위치가 곧 카드 인덱스이므로 빈 제목도 자리(순서)는 유지한다.
-    cleaned = [str(title).strip() for title in titles]
+    # 초대형 제목은 잘라 남용/토큰 폭증을 막는다(원문이 아니라 제목이므로 손실 미미).
+    cleaned = [str(title).strip()[:MAX_TITLE_LEN] for title in titles]
     if not any(cleaned):
         return []
     if len(cleaned) > MAX_TITLES:

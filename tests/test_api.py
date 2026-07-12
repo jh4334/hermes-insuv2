@@ -143,10 +143,13 @@ def test_api_extract_pdfs_rejects_renamed_non_pdf_payload():
     assert any("PDF 형식" in message for message in payload["messages"])
 
 
-def test_api_extract_pdfs_has_no_artificial_request_size_limit():
+def test_api_extract_pdfs_enforces_a_request_size_limit():
+    # Policy change (C5): a local server must cap request size so a huge
+    # multipart upload cannot exhaust memory. Previously this was intentionally
+    # unset; it is now bounded at 64MB.
     app = create_app()
 
-    assert app.config.get("MAX_CONTENT_LENGTH") is None
+    assert app.config.get("MAX_CONTENT_LENGTH") == 64 * 1024 * 1024
 
 
 def test_api_analyze_returns_candidates_and_operations_board_json_contract():
@@ -370,3 +373,29 @@ def test_api_analyze_rejects_out_of_range_target_year_without_500():
         payload = res.get_json()
         assert payload["error"] == "invalid_request"
         assert any("targetYear" in message for message in payload["messages"])
+
+
+def test_extract_pdfs_rejects_too_many_files():
+    app = create_app()
+    client = app.test_client()
+    payload = {"targetYear": "2026", "files": [(BytesIO(b"%PDF-1.4 x"), f"d{i}.pdf") for i in range(61)]}
+    resp = client.post("/api/extract-pdfs", data=payload, content_type="multipart/form-data")
+    assert resp.status_code == 400
+    assert any("최대" in m for m in resp.get_json()["messages"])
+
+
+def test_request_too_large_returns_413_json():
+    app = create_app()
+    # shrink the limit for the test so we don't allocate 64MB
+    app.config["MAX_CONTENT_LENGTH"] = 1024
+    client = app.test_client()
+    big = b"x" * 5000
+    resp = client.post("/api/extract-pdfs", data={"files": (BytesIO(big), "big.pdf")}, content_type="multipart/form-data")
+    assert resp.status_code == 413
+    body = resp.get_json()
+    assert body["error"] == "request_too_large"
+
+
+def test_max_content_length_is_configured():
+    app = create_app()
+    assert app.config["MAX_CONTENT_LENGTH"] == 64 * 1024 * 1024

@@ -113,3 +113,22 @@ def test_api_classify_llm_validates_payload():
     client = app.test_client()
     assert client.post("/api/classify-llm", json={"titles": "x"}).status_code == 400
     assert client.post("/api/classify-llm", json=["x"]).status_code == 400
+
+
+def test_classify_titles_truncates_overlong_titles():
+    from hermes_insu.llm_classify import MAX_TITLE_LEN
+
+    captured = {}
+
+    class CapturingMessages:
+        def create(self, **kwargs):
+            captured["content"] = kwargs["messages"][0]["content"]
+            return FakeResponse({"results": []})
+
+    class CapturingClient:
+        messages = CapturingMessages()
+
+    long_title = "가" * (MAX_TITLE_LEN + 500)
+    classify_titles([long_title], client=CapturingClient())
+    # The prompt must not contain a title longer than the cap.
+    assert ("가" * (MAX_TITLE_LEN + 1)) not in captured["content"]
