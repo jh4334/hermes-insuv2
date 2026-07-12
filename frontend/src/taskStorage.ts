@@ -4,6 +4,8 @@ import {
   normalizeTaskGroupColor,
   normalizeTaskGroupName,
 } from './taskGroups';
+import { normalizeStoredRules } from './classify/ruleMemory';
+import type { LearnedRule } from './classify/ruleMemory';
 import { parsePmiMemo, serializePmiMemo } from './lib/format';
 
 export type Priority = 'critical' | 'high' | 'normal' | 'low';
@@ -53,6 +55,8 @@ export type LocalDataSnapshot = {
   readonly tasks: Task[];
   readonly memos: Memo[];
   readonly bundlePmiMemos: BundlePmiMemo[];
+  /** 자동 분류 학습 규칙(키워드→그룹). 인계자→인수자 백업 전달 시 함께 넘어간다. */
+  readonly learnedRules: LearnedRule[];
 };
 
 export type BackupImportResult =
@@ -194,6 +198,7 @@ export function createLocalDataSnapshot(
   memos: Memo[],
   bundlePmiMemosOrExportedAt: BundlePmiMemo[] | string = [],
   exportedAt = new Date().toISOString(),
+  learnedRules: LearnedRule[] = [],
 ): LocalDataSnapshot {
   const normalizedTasks = normalizeStoredTasks(tasks);
   const bundlePmiMemos = typeof bundlePmiMemosOrExportedAt === 'string'
@@ -205,6 +210,7 @@ export function createLocalDataSnapshot(
     tasks: normalizedTasks,
     memos: normalizeStoredMemos(memos),
     bundlePmiMemos,
+    learnedRules: normalizeStoredRules(learnedRules),
   };
 }
 
@@ -233,6 +239,7 @@ function snapshotFromUnknown(value: unknown): LocalDataSnapshot | null {
     normalizeStoredMemos(value.memos),
     normalizeStoredBundlePmiMemos(value.bundlePmiMemos, tasks),
     stringOrNull(value.exportedAt) ?? new Date().toISOString(),
+    normalizeStoredRules(value.learnedRules),
   );
 }
 
@@ -283,7 +290,13 @@ export function parseLocalBackupText(text: string): BackupImportResult {
 
   return {
     ok: true,
-    snapshot: createLocalDataSnapshot(tasks, memos, bundlePmiMemos, stringOrNull(parsed.exportedAt) ?? new Date().toISOString()),
+    snapshot: createLocalDataSnapshot(
+      tasks,
+      memos,
+      bundlePmiMemos,
+      stringOrNull(parsed.exportedAt) ?? new Date().toISOString(),
+      normalizeStoredRules(parsed.learnedRules),
+    ),
   };
 }
 

@@ -177,3 +177,23 @@ describe('successor handoff markdown', () => {
     expect(markdown.match(/^## /gm)).toBeNull();
   });
 });
+
+describe('learned rules in local backup', () => {
+  it('includes learned rules in the snapshot and restores them through parseLocalBackupText', () => {
+    const rules = [{ keyword: '통일교육주간', group_name: '통일', job_name: '계기교육', hits: 2, updated_at: '2026-06-01T00:00:00.000Z' }];
+    const snapshot = createLocalDataSnapshot([], [], [], '2026-06-30T00:00:00.000Z', rules);
+    expect(snapshot.learnedRules).toEqual(rules);
+
+    const parsed = parseLocalBackupText(JSON.stringify(snapshot));
+    if (!parsed.ok) throw new Error(parsed.message);
+    expect(parsed.snapshot.learnedRules).toEqual(rules);
+  });
+
+  it('defaults to an empty rule list for backups made before rules existed', () => {
+    const legacy = createLocalDataSnapshot([], [], [], '2026-06-30T00:00:00.000Z');
+    const { learnedRules: _dropped, ...withoutRules } = legacy;
+    const parsed = parseLocalBackupText(JSON.stringify(withoutRules));
+    if (!parsed.ok) throw new Error(parsed.message);
+    expect(parsed.snapshot.learnedRules).toEqual([]);
+  });
+});

@@ -1,6 +1,7 @@
 import { ChangeEvent, useRef, useState } from 'react';
-import { Download, FileText, Loader2, Trash2, UploadCloud } from 'lucide-react';
+import { Download, FileText, Loader2, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
+import { readRuleMemory, writeRuleMemory } from '../classify/ruleMemory';
 import { countSuccessorMemos, parsePmiMemo } from '../lib/format';
 import { normalizeTaskGroupName } from '../taskGroups';
 import { parseLocalBackupText } from '../taskStorage';
@@ -210,6 +211,8 @@ function LocalDataPanel({
         ) : null}
       </div>
 
+      <LearnedRulesPanel />
+
       <div className="border border-destructive/30 bg-surface p-4" aria-label="위험 작업">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
           <div>
@@ -233,6 +236,63 @@ function LocalDataPanel({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function LearnedRulesPanel() {
+  const [rules, setRules] = useState(() => readRuleMemory());
+  const [resetPending, setResetPending] = useState(false);
+  const topRules = rules
+    .slice()
+    .sort((a, b) => b.hits - a.hits || b.updated_at.localeCompare(a.updated_at))
+    .slice(0, 5);
+
+  function confirmReset() {
+    writeRuleMemory([]);
+    setRules([]);
+    setResetPending(false);
+    toast.success('자동 분류 학습 규칙을 초기화했습니다');
+  }
+
+  return (
+    <div className="border border-border bg-surface p-4" aria-label="자동 분류 학습 규칙">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div>
+          <h3 className="flex items-center gap-1.5 font-display text-base font-semibold"><Sparkles className="size-4 text-ember" aria-hidden /> 자동 분류 학습 규칙</h3>
+          <p className="mt-1 text-xs text-muted-foreground">카드를 옮기거나 묶음을 확정할 때마다 키워드 → 세부업무 규칙을 기억합니다. 로컬 백업에 함께 저장되어 후임자에게도 전달됩니다.</p>
+          <p className="mt-2 text-xs text-muted-foreground" role="status" aria-live="polite">학습된 규칙 {rules.length}개</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setResetPending(true)}
+          disabled={rules.length === 0}
+          className="inline-flex items-center gap-1.5 border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:border-ember hover:text-foreground disabled:opacity-50"
+        >
+          <Trash2 className="size-3.5" /> 학습 규칙 초기화
+        </button>
+      </div>
+      {topRules.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-xs text-muted-foreground" aria-label="자주 쓰인 학습 규칙">
+          {topRules.map((rule) => (
+            <li key={rule.keyword}>
+              <span className="font-semibold text-foreground">{rule.keyword}</span> → {rule.job_name ? `${rule.job_name} / ` : ''}{rule.group_name}
+              <span className="ml-1 font-mono text-[11px]">({rule.hits}회)</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {resetPending ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border border-destructive/40 bg-background p-3 text-xs">
+          <span className="text-muted-foreground">초기화하면 다음 업로드부터 자동 배치가 처음부터 다시 학습됩니다.</span>
+          <button type="button" onClick={confirmReset} className="border border-destructive px-3 py-1.5 font-semibold text-destructive">
+            학습 규칙 초기화 확인
+          </button>
+          <button type="button" onClick={() => setResetPending(false)} className="border border-border px-3 py-1.5 text-muted-foreground">
+            취소
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

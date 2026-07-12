@@ -125,6 +125,16 @@ export function learnAssignment(
   return [...next.values()];
 }
 
+/** 백업 가져오기(추가 모드)에서 두 규칙 목록을 합친다. 같은 키워드는 더 최근 것이 이긴다. */
+export function mergeLearnedRules(base: LearnedRule[], incoming: LearnedRule[]): LearnedRule[] {
+  const map = new Map(base.map((rule) => [rule.keyword, rule] as const));
+  for (const rule of incoming) {
+    const current = map.get(rule.keyword);
+    if (!current || rule.updated_at > current.updated_at) map.set(rule.keyword, rule);
+  }
+  return [...map.values()];
+}
+
 /** 제목과 가장 강하게 겹치는 학습 규칙을 찾는다. 없으면 null. */
 export function matchRuleMemory(rules: LearnedRule[], title: string): RuleMatch | null {
   if (rules.length === 0) return null;

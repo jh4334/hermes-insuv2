@@ -5,6 +5,7 @@ import {
   extractTitleKeywords,
   learnAssignment,
   matchRuleMemory,
+  mergeLearnedRules,
   normalizeStoredRules,
   readRuleMemory,
   writeRuleMemory,
@@ -56,6 +57,22 @@ describe('learnAssignment + matchRuleMemory', () => {
   it('returns null when no rule matches', () => {
     const rules = learnAssignment([], '통일교육주간 운영', '통일');
     expect(matchRuleMemory(rules, '급식소위원회 개최')).toBeNull();
+  });
+});
+
+describe('mergeLearnedRules', () => {
+  it('keeps the newer rule when the same keyword appears in both lists', () => {
+    const base = [{ keyword: '통일교육주간', group_name: '통일', job_name: null, hits: 3, updated_at: '2026-01-01T00:00:00.000Z' }];
+    const incoming = [{ keyword: '통일교육주간', group_name: '계기교육행사', job_name: '계기교육', hits: 1, updated_at: '2026-06-01T00:00:00.000Z' }];
+    const merged = mergeLearnedRules(base, incoming);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].group_name).toBe('계기교육행사');
+  });
+
+  it('unions rules with different keywords', () => {
+    const base = [{ keyword: '통일교육주간', group_name: '통일', job_name: null, hits: 1, updated_at: '2026-01-01T00:00:00.000Z' }];
+    const incoming = [{ keyword: '안전점검', group_name: '안전교육', job_name: null, hits: 1, updated_at: '2026-01-01T00:00:00.000Z' }];
+    expect(mergeLearnedRules(base, incoming)).toHaveLength(2);
   });
 });
 

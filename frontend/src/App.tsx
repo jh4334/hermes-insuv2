@@ -34,6 +34,7 @@ import { buildSampleDemoData } from './sampleDemoData';
 import {
   UNCLASSIFIED_GROUP_NAME,
   learnAssignment,
+  mergeLearnedRules,
   readRuleMemory,
   writeRuleMemory,
 } from './classify/ruleMemory';
@@ -224,7 +225,7 @@ export function App() {
   }
 
   function exportBackup() {
-    const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemos, now());
+    const snapshot = createLocalDataSnapshot(tasks, memos, bundlePmiMemos, now(), readRuleMemory());
     download('modoo-insu-local-backup.json', JSON.stringify(snapshot, null, 2), 'application/json;charset=utf-8');
     setStorageStatus('로컬 백업 저장 완료');
     toast.success('로컬 백업 저장 완료');
@@ -232,6 +233,9 @@ export function App() {
 
   function applyBackupSnapshot(snapshot: LocalDataSnapshot, mode: BackupImportMode) {
     captureUndo(mode === 'append' ? '백업 추가' : '백업 대체');
+    if (snapshot.learnedRules.length > 0) {
+      writeRuleMemory(mode === 'replace' ? snapshot.learnedRules : mergeLearnedRules(readRuleMemory(), snapshot.learnedRules));
+    }
     if (mode === 'replace') {
       saveLocalData(snapshot.tasks, snapshot.memos, '백업 가져오기 완료', snapshot.bundlePmiMemos);
       toast.success('백업 가져오기 완료');
