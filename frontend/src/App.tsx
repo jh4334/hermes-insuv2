@@ -41,7 +41,7 @@ import { PERSONA_COPY, readPersonaMode, writePersonaMode } from './persona';
 import type { PersonaMode } from './persona';
 import { StructureBoard } from './components/StructureBoard';
 import type { StructureCardPatch } from './components/StructureBoard';
-import { normalizeTaskGroupName } from './taskGroups';
+import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName } from './taskGroups';
 import {
   buildSuccessorHandoffMarkdown,
   createLocalDataSnapshot,
@@ -280,6 +280,11 @@ export function App() {
     }
   }
 
+  const unclassifiedCount = useMemo(
+    () => tasks.filter((task) => normalizeTaskGroupName(task.group_name) === UNCLASSIFIED_GROUP_NAME).length,
+    [tasks],
+  );
+
   function navigate(nextView: View) {
     if (nextView !== 'archive') setArchiveGroupFocus(null);
     setView(nextView);
@@ -299,12 +304,13 @@ export function App() {
     const targetGroupName = normalizeTaskGroupName(patch.group_name ?? task.group_name);
     const groupChanged = targetGroupName !== normalizeTaskGroupName(task.group_name);
     const targetGroupTask = groupChanged ? tasks.find((item) => normalizeTaskGroupName(item.group_name) === targetGroupName) : null;
+    const fallbackColor = targetGroupName === UNCLASSIFIED_GROUP_NAME ? DEFAULT_TASK_GROUP_COLOR : task.group_color;
     const next = tasks.map((item) =>
       item.id === taskId
         ? {
             ...item,
             group_name: targetGroupName,
-            group_color: groupChanged ? targetGroupTask?.group_color ?? item.group_color : item.group_color,
+            group_color: groupChanged ? targetGroupTask?.group_color ?? fallbackColor : item.group_color,
             job_name: groupChanged ? targetGroupTask?.job_name ?? null : item.job_name,
             category: patch.category !== undefined ? patch.category : item.category,
             updated_at: now(),
@@ -323,7 +329,16 @@ export function App() {
     const to = normalizeTaskGroupName(newName);
     if (from === to) return;
     captureUndo('세부업무 이름 변경');
-    const next = tasks.map((task) => (normalizeTaskGroupName(task.group_name) === from ? { ...task, group_name: to, updated_at: now() } : task));
+    const mergeTarget = tasks.find((task) => normalizeTaskGroupName(task.group_name) === to);
+    const next = tasks.map((task) => (normalizeTaskGroupName(task.group_name) === from
+      ? {
+          ...task,
+          group_name: to,
+          group_color: mergeTarget?.group_color ?? task.group_color,
+          job_name: mergeTarget ? mergeTarget.job_name ?? null : task.job_name,
+          updated_at: now(),
+        }
+      : task));
     const nextBundlePmiMemos = bundlePmiMemos.map((memo) => (normalizeTaskGroupName(memo.group_name) === from ? { ...memo, group_name: to } : memo));
     saveLocalData(next, memos, `${from} → ${to} 이름이 변경되었습니다`, nextBundlePmiMemos);
     writeRuleMemory(readRuleMemory().map((rule) => (rule.group_name === from ? { ...rule, group_name: to } : rule)));
@@ -341,7 +356,7 @@ export function App() {
   return (
     <div data-testid="app-shell" className={'flex min-h-screen w-full bg-background text-foreground ' + (presentationMode ? 'presentation-mode' : '')}>
       {personaMode === null ? <PersonaOnboarding onPick={pickPersona} /> : null}
-      <AppSidebar active={view} personaMode={personaMode} onPickPersona={pickPersona} presentationMode={presentationMode} onTogglePresentationMode={() => setPresentationMode((value) => !value)} onNavigate={navigate} />
+      <AppSidebar active={view} personaMode={personaMode} unclassifiedCount={unclassifiedCount} onPickPersona={pickPersona} presentationMode={presentationMode} onTogglePresentationMode={() => setPresentationMode((value) => !value)} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
         {view === 'calendar' && <YearCalendar tasks={tasks} holidayDates={holidayDates} personaCopy={personaMode ? PERSONA_COPY[personaMode] : undefined} onAddTasks={appendTasks} onLoadSampleDemoData={loadSampleDemoData} onDeleteGroup={deleteTaskGroup} onMoveTask={moveTaskToDate} onUpdateTask={updateTask} />}
         {view === 'structure' && (
@@ -353,7 +368,7 @@ export function App() {
                   ? '전임자의 카드를 업무 > 세부업무 > 단계 흐름으로 파악합니다. 미분류 카드를 드래그해 정리하세요'
                   : '구조도 1장이 곧 인수인계서입니다. 미분류 카드를 드래그해 세부업무를 만들고 업무로 묶으세요'}
               />
-              <StructureBoard tasks={tasks} onMoveCard={moveStructureCard} onRenameGroup={renameStructureGroup} onAssignJob={assignJobToGroup} />
+              <StructureBoard tasks={tasks} onMoveCard={moveStructureCard} onRenameGroup={renameStructureGroup} onAssignJob={assignJobToGroup} onGoToCalendar={() => navigate('calendar')} />
             </div>
           </main>
         )}
@@ -415,7 +430,7 @@ function PersonaOnboarding({ onPick }: { onPick: (mode: PersonaMode) => void }) 
   );
 }
 
-function AppSidebar({ active, personaMode, onPickPersona, presentationMode, onTogglePresentationMode, onNavigate }: { active: View; personaMode: PersonaMode | null; onPickPersona: (mode: PersonaMode) => void; presentationMode: boolean; onTogglePresentationMode: () => void; onNavigate: (view: View) => void }) {
+function AppSidebar({ active, personaMode, unclassifiedCount, onPickPersona, presentationMode, onTogglePresentationMode, onNavigate }: { active: View; personaMode: PersonaMode | null; unclassifiedCount: number; onPickPersona: (mode: PersonaMode) => void; presentationMode: boolean; onTogglePresentationMode: () => void; onNavigate: (view: View) => void }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-background p-6 md:flex">
       <div className="mb-8">
@@ -457,6 +472,11 @@ function AppSidebar({ active, personaMode, onPickPersona, presentationMode, onTo
             >
               <Icon className="size-4" />
               {item.label}
+              {item.id === 'structure' && unclassifiedCount > 0 ? (
+                <span aria-label={`미분류 ${unclassifiedCount}건`} className="ml-auto rounded-full border border-ember/50 bg-ember-soft px-1.5 py-0.5 font-mono text-[11px] font-bold text-ember">
+                  {unclassifiedCount}
+                </span>
+              ) : null}
             </button>
           );
         })}

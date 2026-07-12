@@ -80,11 +80,13 @@ export function StructureBoard({
   onMoveCard,
   onRenameGroup,
   onAssignJob,
+  onGoToCalendar,
 }: {
   tasks: Task[];
   onMoveCard: (taskId: string, patch: StructureCardPatch) => void;
   onRenameGroup: (oldName: string, newName: string) => void;
   onAssignJob: (groupName: string, jobName: string | null) => void;
+  onGoToCalendar?: () => void;
 }) {
   const groups = useMemo(() => buildStructureGroups(tasks), [tasks]);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -246,6 +248,11 @@ export function StructureBoard({
       <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-border bg-surface/40 p-12 text-center">
         <p className="font-display text-lg font-semibold">구조도에 놓을 카드가 아직 없어요</p>
         <p className="max-w-md text-sm text-muted-foreground">캘린더 화면에서 공문 PDF를 우르르 올리면 자동 분류가 세부업무 후보를 제안하고, 여기서 업무 &gt; 세부업무 &gt; 단계 흐름으로 정리할 수 있어요.</p>
+        {onGoToCalendar ? (
+          <button type="button" onClick={onGoToCalendar} className="mt-2 bg-ember px-5 py-2 text-sm font-semibold text-ember-foreground hover:brightness-110">
+            캘린더에서 공문 업로드하러 가기
+          </button>
+        ) : null}
       </div>
     );
   }

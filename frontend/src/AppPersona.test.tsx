@@ -18,11 +18,12 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
 });
 
-function seedStructureTasks() {
+function seedStructureTasks(extraTasks: Array<Record<string, unknown>> = []) {
   storage.set(SNAPSHOT_KEY, JSON.stringify({
     schemaVersion: 1,
     exportedAt: '2026-06-30T00:00:00.000Z',
     tasks: [
+      ...extraTasks,
       {
         id: 'unified-1',
         title: '통일교육주간 운영 계획',
@@ -137,6 +138,56 @@ describe('structure view integration', () => {
     expect(rules).toEqual(expect.arrayContaining([
       expect.objectContaining({ group_name: '통일', job_name: '계기교육' }),
     ]));
+  });
+
+  it('shows the unclassified count badge on the 구조도 nav item and a calendar shortcut on the empty state', async () => {
+    seedStructureTasks();
+    render(<App />);
+    expect(screen.getByLabelText(/미분류 1건/i)).toHaveTextContent('1');
+
+    storage.clear();
+    storage.set(PERSONA_KEY, 'giver');
+    cleanup();
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /캘린더에서 공문 업로드하러 가기/i }));
+    expect(screen.getByRole('heading', { name: /연간 캘린더/i })).toBeInTheDocument();
+  });
+
+  it('merges into an existing 세부업무 on rename and adopts its color and 업무', async () => {
+    seedStructureTasks([
+      {
+        id: 'stray-1',
+        title: '통일 골든벨 운영',
+        description: null,
+        start_date: '2026-07-01',
+        end_date: null,
+        category: '계획',
+        job_name: null,
+        group_name: '통일행사',
+        group_color: '#059669',
+        priority: 'normal',
+        source_doc: 'DOC-3',
+        owner: '교무부',
+        reference_location: null,
+        successor_memo: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText(/^통일행사 이름 수정$/i));
+    const renameInput = screen.getByLabelText(/통일행사 세부업무 이름 수정/i);
+    fireEvent.change(renameInput, { target: { value: '통일' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      const snapshot = JSON.parse(storage.get(SNAPSHOT_KEY) ?? '{}');
+      const merged = snapshot.tasks.find((task: { id: string }) => task.id === 'stray-1');
+      expect(merged.group_name).toBe('통일');
+      expect(merged.group_color).toBe('#2563eb');
+      expect(merged.job_name).toBe('계기교육');
+    });
   });
 
   it('renames a 세부업무 and assigns an 업무 bucket from the structure view', async () => {
