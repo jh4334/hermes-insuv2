@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ArrowRightLeft, Check, Sparkles, X } from 'lucide-react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { UNCLASSIFIED_GROUP_NAME } from '../classify/ruleMemory';
 import type { ClassifyResult } from '../classify/engine';
 import type { GroupSource } from '../classify/engine';
@@ -64,6 +65,7 @@ export function ClassifyReviewDialog({
       cardIndexes: [...bucket.cardIndexes],
     })),
   );
+  const dialogRef = useDialogA11y<HTMLDivElement>(onClose);
   const existingGroupNames = useMemo(
     () => [...new Set(existingGroups.map((group) => group.group_name.trim()).filter(Boolean))],
     [existingGroups],
@@ -139,7 +141,7 @@ export function ClassifyReviewDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[86vh] w-full max-w-3xl flex-col border border-border bg-surface shadow-2xl">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="자동 분류 검토" className="flex max-h-[86vh] w-full max-w-3xl flex-col border border-border bg-surface shadow-2xl outline-none">
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
             <h3 className="flex items-center gap-2 font-display text-lg font-semibold"><Sparkles className="size-4 text-ember" /> 이렇게 나눴어요</h3>

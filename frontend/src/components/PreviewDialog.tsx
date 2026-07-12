@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import type { ExtractedFile, PreviewTaskInput } from '../types';
 
 function displayOrDash(value?: string | null) {
@@ -20,6 +21,7 @@ export function PreviewDialog({
   onSave: () => void;
   saving: boolean;
 }) {
+  const dialogRef = useDialogA11y<HTMLDivElement>(onClose);
   const canSave = !saving && tasks.length > 0;
   const hasReceivedDocuments = tasks.some((task) => task.document_type === 'received' || task.sender_org);
   const actorLabel = hasReceivedDocuments ? '발신기관' : '담당';
@@ -27,7 +29,7 @@ export function PreviewDialog({
   const update = (i: number, patch: Partial<PreviewTaskInput>) => onChange(tasks.map((task, idx) => (idx === i ? { ...task, ...patch, priority: 'normal' } : task)));
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-      <div className="flex h-[82vh] w-full max-w-4xl flex-col border border-border bg-surface shadow-2xl">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="추출 결과 미리보기" className="flex h-[82vh] w-full max-w-4xl flex-col border border-border bg-surface shadow-2xl outline-none">
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
             <h3 className="font-display text-lg font-semibold">추출 결과 미리보기</h3>

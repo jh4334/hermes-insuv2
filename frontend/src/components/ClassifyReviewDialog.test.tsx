@@ -59,6 +59,23 @@ describe('ClassifyReviewDialog', () => {
     expect(assignments.find((entry) => entry.task.title === '통일교육주간 운영 계획')?.groupName).toBe('통일교육주간');
   });
 
+  it('closes on Escape for keyboard users', () => {
+    const onClose = vi.fn();
+    const classification = classifyCards(TASKS.map((task) => ({ title: task.title, category: task.category })));
+    render(
+      <ClassifyReviewDialog
+        tasks={TASKS}
+        classification={classification}
+        existingGroups={[]}
+        onConfirm={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+    expect(screen.getByRole('dialog', { name: /자동 분류 검토/ })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('moves a card to an existing group, creating the bucket on demand and dropping emptied buckets', () => {
     renderDialog();
 
