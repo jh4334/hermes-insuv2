@@ -2005,12 +2005,19 @@ it('shows text group labels across calendar and task list views', async () => {
     expect(workflow).toContain('npm run build');
   });
 
-  it('shows a mobile bottom tab bar that uses the same three navigation targets', () => {
+  it('shows a mobile bottom tab bar with one column per navigation target', () => {
     render(<App />);
 
     const mobileNav = screen.getByRole('navigation', { name: /모바일 주요 화면/i });
     expect(mobileNav).toHaveClass('md:hidden');
+    // The grid must have exactly one column per nav item — a fixed grid-cols-N
+    // would overflow when a tab is added (the 구조도 regression).
+    const tabButtons = within(mobileNav).getAllByRole('button');
+    expect(tabButtons).toHaveLength(4);
+    expect(mobileNav).not.toHaveClass('grid-cols-3');
+    expect(mobileNav.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
     expect(within(mobileNav).getByRole('button', { name: /모바일 캘린더 탭/i })).toHaveAttribute('aria-current', 'page');
+    expect(within(mobileNav).getByRole('button', { name: /모바일 구조도 탭/i })).toBeInTheDocument();
 
     fireEvent.click(within(mobileNav).getByRole('button', { name: /모바일 업무목록 탭/i }));
     expect(screen.getByRole('heading', { name: /^업무목록$/i })).toBeInTheDocument();

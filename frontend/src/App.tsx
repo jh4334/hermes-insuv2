@@ -498,7 +498,11 @@ function AppSidebar({ active, personaMode, unclassifiedCount, onPickPersona, pre
 
 function MobileBottomNav({ active, onNavigate }: { active: View; onNavigate: (view: View) => void }) {
   return (
-    <nav aria-label="모바일 주요 화면" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-border bg-background/95 p-2 shadow-2xl backdrop-blur md:hidden">
+    <nav
+      aria-label="모바일 주요 화면"
+      className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-background/95 p-2 shadow-2xl backdrop-blur md:hidden"
+      style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = active === item.id;
@@ -510,7 +514,7 @@ function MobileBottomNav({ active, onNavigate }: { active: View; onNavigate: (vi
             aria-label={`모바일 ${item.label} 탭`}
             aria-current={isActive ? 'page' : undefined}
             className={
-              'flex flex-col items-center justify-center gap-1 rounded-sm px-2 py-2 text-[11px] font-semibold transition-colors ' +
+              'flex min-h-12 flex-col items-center justify-center gap-1 rounded-sm px-1 py-2 text-[11px] font-semibold transition-colors ' +
               (isActive ? 'bg-ember-soft text-ember' : 'text-muted-foreground hover:bg-surface hover:text-foreground')
             }
           >
