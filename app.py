@@ -227,6 +227,32 @@ def create_app(frontend_dist: str | Path | None = None, prefer_react: bool = Fal
             }
         )
 
+    @app.post("/api/classify-llm")
+    def api_classify_llm():
+        from hermes_insu.llm_classify import (
+            MAX_TITLES,
+            LlmClassifyError,
+            LlmUnavailableError,
+            classify_titles,
+        )
+
+        data = request_json_payload()
+        if not isinstance(data, dict):
+            return jsonify({"error": "invalid_request", "messages": ["Request body must be a JSON object."]}), 400
+        titles = data.get("titles")
+        if not isinstance(titles, list) or not all(isinstance(title, str) for title in titles):
+            return jsonify({"error": "invalid_request", "messages": ["titles must be a list of strings."]}), 400
+        if len(titles) > MAX_TITLES:
+            return jsonify({"error": "invalid_request", "messages": [f"titles must contain at most {MAX_TITLES} items."]}), 400
+
+        try:
+            results = classify_titles(titles)
+        except LlmUnavailableError as exc:
+            return jsonify({"error": "llm_unavailable", "message": str(exc)}), 503
+        except LlmClassifyError as exc:
+            return jsonify({"error": "llm_failed", "message": str(exc)}), 502
+        return jsonify({"contractVersion": "classify-llm.v1", "results": results})
+
     @app.post("/api/export")
     def api_export():
         data = request_json_payload()

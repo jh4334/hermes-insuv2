@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Inbox, Pencil, Plus, X } from 'lucide-react';
 import { UNCLASSIFIED_GROUP_NAME } from '../classify/ruleMemory';
+import { detectReworkLoop } from '../classify/stageRules';
 import { normalizeWorkflowCardStage } from '../lib/format';
 import { DEFAULT_TASK_GROUP_COLOR, normalizeTaskGroupName } from '../taskGroups';
 import { WORKFLOW_CARD_STAGES } from '../theme/tokens';
@@ -18,6 +19,20 @@ import type { WorkflowCardStage } from '../types';
 
 const NO_STAGE_COLUMN = '단계미정';
 const UNASSIGNED_JOB_LABEL = '업무 미지정';
+
+/** 단계별 책임 주체 레인(기획 §6 스윔레인 2축의 경량판): 열마다 책임 주체를 표시한다. */
+const STAGE_ACTORS: Record<string, string> = {
+  계획: '담당',
+  '심의·협의': '위원회·심의기구',
+  품의: '담당·행정실',
+  결과보고: '담당',
+  [NO_STAGE_COLUMN]: '',
+};
+
+/** 접수공문(외부기관 발신) 카드 여부 — 외부 책임 주체 표시에 쓴다. */
+function isExternalTask(task: Task): boolean {
+  return task.document_type === 'received' || Boolean(task.sender_org?.trim());
+}
 
 export type StructureCardPatch = {
   readonly group_name?: string;
@@ -65,6 +80,9 @@ export function groupChecks(group: StructureGroup): GroupCheck[] {
   const checks: GroupCheck[] = [];
   if ((counts['계획'] > 0 || counts['품의'] > 0) && counts['결과보고'] === 0) {
     checks.push({ tone: 'warn', message: '결과보고 미등록' });
+  }
+  if (group.tasks.some((task) => detectReworkLoop(task.title))) {
+    checks.push({ tone: 'info', message: '보완 루프 있음' });
   }
   if (counts['결과보고'] > 0 && counts['품의'] === 0 && counts['계획'] > 0) {
     checks.push({ tone: 'info', message: '품의 건너뜀' });
@@ -166,12 +184,17 @@ export function StructureBoard({
             aria-label={`${task.title} 구조도 카드`}
             onDragStart={() => setDraggedTaskId(task.id)}
             onDragEnd={() => setDraggedTaskId(null)}
-            title={`${task.title} · ${task.start_date}`}
+            title={`${task.title} · ${task.start_date}${isExternalTask(task) && task.sender_org ? ` · 발신: ${task.sender_org}` : ''}`}
             className="block w-full cursor-grab border bg-surface px-1.5 py-1 text-left text-[11px] font-medium leading-snug text-foreground hover:border-ember active:cursor-grabbing"
             style={{ borderColor: group.color }}
           >
             <span className="block truncate">{task.title}</span>
-            <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{task.start_date}</span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-1">
+              <span className="font-mono text-[10px] text-muted-foreground">{task.start_date}</span>
+              {task.project_name ? <span className="rounded-full border border-sky-200 bg-sky-50 px-1 text-[10px] font-semibold text-sky-700">{task.project_name}</span> : null}
+              {detectReworkLoop(task.title) ? <span className="rounded-full border border-ember/40 bg-ember-soft px-1 text-[10px] font-semibold text-ember">보완↩</span> : null}
+              {isExternalTask(task) ? <span className="rounded-full border border-violet-200 bg-violet-50 px-1 text-[10px] font-semibold text-violet-700">외부</span> : null}
+            </span>
           </button>
         ))}
       </div>
@@ -263,7 +286,10 @@ export function StructureBoard({
         <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${WORKFLOW_CARD_STAGES.length + 1}, minmax(0, 1fr))` }}>
           {[...WORKFLOW_CARD_STAGES, NO_STAGE_COLUMN].map((column) => (
             <div key={column} className="min-w-0">
-              <p className="mb-1 text-center text-[10px] font-semibold text-muted-foreground">{column}</p>
+              <p className="mb-1 text-center text-[10px] font-semibold text-muted-foreground">
+                {column}
+                {STAGE_ACTORS[column] ? <span className="block font-normal text-muted-foreground/80">{STAGE_ACTORS[column]}</span> : null}
+              </p>
               {renderStageCell(group, column)}
             </div>
           ))}
@@ -291,6 +317,12 @@ export function StructureBoard({
       <datalist id="structure-job-names">
         {jobNames.map((name) => <option key={name} value={name} />)}
       </datalist>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border border-border bg-surface px-3 py-2 text-[11px] text-muted-foreground" aria-label="구조도 흐름 범례">
+        <span className="font-semibold text-foreground">{WORKFLOW_CARD_STAGES.join(' → ')}</span>
+        <span><span className="font-semibold text-ember">보완↩</span> 반려·재기안으로 되돌아온 카드</span>
+        <span><span className="font-semibold text-violet-700">외부</span> 외부기관 발신(접수) 공문</span>
+        <span><span className="font-semibold text-sky-700">파란 태그</span> 세부업무 안의 사업(예: 통일교육주간)</span>
+      </div>
       {unclassified ? renderGroupLane(unclassified, true) : null}
       <div className="flex flex-wrap items-center gap-2 border border-border bg-surface p-3" aria-label="새 세부업무 만들기">
         <Plus className="size-4 text-ember" aria-hidden />

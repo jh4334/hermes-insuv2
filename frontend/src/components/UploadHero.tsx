@@ -8,6 +8,7 @@ import {
 } from '../lib/format';
 import { classifyCards } from '../classify/engine';
 import type { ClassifyResult } from '../classify/engine';
+import { fetchLlmSuggestions, mergeLlmSuggestions, readOnlineLlmEnabled } from '../classify/llm';
 import {
   UNCLASSIFIED_GROUP_NAME,
   learnAssignment,
@@ -128,9 +129,18 @@ export function UploadHero({
     }
   }
 
-  function openClassifyReview() {
+  async function openClassifyReview() {
     if (!preview || preview.length === 0) return;
-    setReview(classifyCards(preview.map((task) => ({ title: task.title, category: task.category })), readRuleMemory()));
+    let result = classifyCards(preview.map((task) => ({ title: task.title, category: task.category })), readRuleMemory());
+    if (readOnlineLlmEnabled()) {
+      // 옵트인한 경우에만 제목만 전송. 실패하면 조용히 오프라인 결과를 쓴다.
+      const suggestions = await fetchLlmSuggestions(preview.map((task) => task.title));
+      if (suggestions) {
+        result = mergeLlmSuggestions(result, suggestions);
+        toast.success('온라인 LLM 분류 제안을 반영했어요');
+      }
+    }
+    setReview(result);
   }
 
   function saveAssignments(assignments: BucketAssignment[]) {
@@ -155,6 +165,7 @@ export function UploadHero({
         priority: 'normal',
         category: assignment.stage,
         job_name: assignment.jobName,
+        project_name: assignment.projectName,
         group_name: groupName,
         group_color: groupColor,
       };

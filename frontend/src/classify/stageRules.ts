@@ -44,6 +44,16 @@ export function suggestStageFromTitle(title: string): StageSuggestion {
   return { stage: null, confidence: 0, matchedKeyword: null };
 }
 
+const REWORK_KEYWORDS = ['반려', '보완 제출', '보완제출', '재기안', '재제출', '재심의', '수정 재요청'];
+
+/**
+ * 보완(반려) 회귀 감지: 반려되어 되돌아온 문서인지 제목으로 판별한다.
+ * 구조도에서 회귀 루프 배지와 자동 점검에 쓰인다(기획 §6).
+ */
+export function detectReworkLoop(title: string): boolean {
+  return REWORK_KEYWORDS.some((keyword) => title.includes(keyword));
+}
+
 /**
  * 이미 붙어 있는 단계 태그를 존중하되, 위원회 제목은 심의·협의로 승격한다.
  * (백엔드 V1 규칙은 심의·협의 단계를 모르기 때문에 여기서 보정한다.)

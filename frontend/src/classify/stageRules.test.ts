@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveCardStage, suggestStageFromTitle } from './stageRules';
+import { detectReworkLoop, resolveCardStage, suggestStageFromTitle } from './stageRules';
 
 describe('suggestStageFromTitle', () => {
   it('classifies plan titles as 계획', () => {
@@ -34,6 +34,14 @@ describe('suggestStageFromTitle', () => {
     const result = suggestStageFromTitle('교직원 명단');
     expect(result.stage).toBeNull();
     expect(result.confidence).toBe(0);
+  });
+});
+
+describe('detectReworkLoop', () => {
+  it('detects 반려/재기안-style rework titles', () => {
+    expect(detectReworkLoop('현장체험학습 계획 반려에 따른 재기안')).toBe(true);
+    expect(detectReworkLoop('예산 품의 보완 제출')).toBe(true);
+    expect(detectReworkLoop('안전교육 운영 계획')).toBe(false);
   });
 });
 

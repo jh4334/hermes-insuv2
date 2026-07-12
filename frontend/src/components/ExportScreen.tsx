@@ -1,6 +1,7 @@
 import { ChangeEvent, useRef, useState } from 'react';
 import { Download, FileText, Loader2, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
+import { readOnlineLlmEnabled, writeOnlineLlmEnabled } from '../classify/llm';
 import { readRuleMemory, writeRuleMemory } from '../classify/ruleMemory';
 import { countSuccessorMemos, parsePmiMemo } from '../lib/format';
 import { normalizeTaskGroupName } from '../taskGroups';
@@ -213,6 +214,8 @@ function LocalDataPanel({
 
       <LearnedRulesPanel />
 
+      <OnlineLlmPanel />
+
       <div className="border border-destructive/30 bg-surface p-4" aria-label="위험 작업">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
           <div>
@@ -292,6 +295,40 @@ function LearnedRulesPanel() {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function OnlineLlmPanel() {
+  const [enabled, setEnabled] = useState(() => readOnlineLlmEnabled());
+
+  function toggle(next: boolean) {
+    writeOnlineLlmEnabled(next);
+    setEnabled(next);
+    toast.success(next ? '온라인 LLM 분류를 켰습니다 — 업로드 시 제목만 전송됩니다' : '온라인 LLM 분류를 껐습니다');
+  }
+
+  return (
+    <div className="border border-border bg-surface p-4" aria-label="온라인 LLM 분류 설정">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div>
+          <h3 className="font-display text-base font-semibold">온라인 LLM 분류 (선택)</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            켜면 업로드 시 공문 <strong className="text-foreground">제목만</strong> 서버로 보내 업무/세부업무/단계 제안 정확도를 높입니다.
+            원문·첨부·개인정보는 전송하지 않으며, 기본값은 꺼짐입니다. 서버에 키가 없거나 실패하면 자동으로 오프라인 규칙 분류를 사용합니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="온라인 LLM 분류 사용"
+          onClick={() => toggle(!enabled)}
+          className={'shrink-0 border px-4 py-2 text-xs font-semibold transition-colors ' + (enabled ? 'border-ember bg-ember text-ember-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground')}
+        >
+          {enabled ? '켜짐 · 동의함' : '꺼짐'}
+        </button>
+      </div>
     </div>
   );
 }

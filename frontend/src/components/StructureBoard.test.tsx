@@ -24,8 +24,8 @@ function makeTask(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
 }
 
 const TASKS: Task[] = [
-  makeTask({ id: 't1', title: '통일교육주간 운영 계획', group_name: '통일', job_name: '계기교육', category: '계획' }),
-  makeTask({ id: 't2', title: '통일교육주간 물품 구입', group_name: '통일', job_name: '계기교육', category: '품의', start_date: '2026-05-20' }),
+  makeTask({ id: 't1', title: '통일교육주간 운영 계획', group_name: '통일', job_name: '계기교육', category: '계획', project_name: '통일교육주간' }),
+  makeTask({ id: 't2', title: '통일교육주간 물품 구입 반려에 따른 재기안', group_name: '통일', job_name: '계기교육', category: '품의', start_date: '2026-05-20', project_name: '통일교육주간' }),
   makeTask({ id: 't3', title: '학교급식소위원회 개최', group_name: '급식', category: '심의·협의' }),
   makeTask({ id: 't4', title: '정체불명 공문', group_name: '미분류', category: null }),
 ];
@@ -59,6 +59,19 @@ describe('StructureBoard', () => {
     expect(within(unifiedLane).getByLabelText(/통일 품의 칸 1건/i)).toBeInTheDocument();
     expect(within(unifiedLane).getByText(/결과보고 미등록/i)).toBeInTheDocument();
     expect(within(screen.getByLabelText(/급식 세부업무 레인/i)).getByLabelText(/급식 심의·협의 칸 1건/i)).toBeInTheDocument();
+  });
+
+  it('shows the flow legend, 사업 tags, rework badges, and the 보완 루프 auto check', () => {
+    render(<StructureBoard tasks={TASKS} onMoveCard={vi.fn()} onRenameGroup={vi.fn()} onAssignJob={vi.fn()} />);
+
+    const legend = screen.getByLabelText(/구조도 흐름 범례/i);
+    expect(legend).toHaveTextContent('계획 → 심의·협의 → 품의 → 결과보고');
+
+    const unifiedLane = screen.getByLabelText(/통일 세부업무 레인/i);
+    expect(within(unifiedLane).getByText(/보완 루프 있음/i)).toBeInTheDocument();
+    expect(within(unifiedLane).getAllByText(/통일교육주간/i, { selector: 'span' }).length).toBeGreaterThan(0);
+    expect(within(unifiedLane).getByText('보완↩')).toBeInTheDocument();
+    expect(within(unifiedLane).getAllByText(/위원회·심의기구/i).length).toBeGreaterThan(0);
   });
 
   it('drags an unclassified card into a stage cell of another 세부업무', () => {

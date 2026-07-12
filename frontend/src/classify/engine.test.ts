@@ -54,6 +54,17 @@ describe('classifyCards', () => {
     expect(result.cards[0].stage).toBe('심의·협의');
   });
 
+  it('extracts 사업 names and rework flags per card', () => {
+    const result = classifyCards([
+      { title: '통일교육주간 운영 계획', category: null },
+      { title: '수학여행 품의 반려에 따른 재기안', category: null },
+    ]);
+    expect(result.cards[0].projectName).toBe('통일교육주간');
+    expect(result.cards[0].isRework).toBe(false);
+    expect(result.cards[1].projectName).toBeNull();
+    expect(result.cards[1].isRework).toBe(true);
+  });
+
   it('handles an empty card list', () => {
     expect(classifyCards([])).toEqual({ cards: [], buckets: [] });
   });

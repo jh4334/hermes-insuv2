@@ -1,4 +1,5 @@
-import { resolveCardStage } from './stageRules';
+import { extractProjectName } from './projects';
+import { detectReworkLoop, resolveCardStage } from './stageRules';
 import {
   UNCLASSIFIED_GROUP_NAME,
   extractTitleKeywords,
@@ -24,7 +25,7 @@ export type ClassifiableCard = {
   readonly category?: string | null;
 };
 
-export type GroupSource = 'memory' | 'cluster' | 'unclassified';
+export type GroupSource = 'memory' | 'cluster' | 'llm' | 'unclassified';
 
 export type CardClassification = {
   readonly index: number;
@@ -32,6 +33,8 @@ export type CardClassification = {
   readonly stageConfidence: number;
   readonly groupName: string;
   readonly jobName: string | null;
+  readonly projectName: string | null;
+  readonly isRework: boolean;
   readonly groupConfidence: number;
   readonly groupSource: GroupSource;
   readonly matchedKeyword: string | null;
@@ -137,6 +140,8 @@ export function classifyCards(cards: readonly ClassifiableCard[], rules: Learned
       stageConfidence: stage.confidence,
       groupName: proposal.groupName,
       jobName: proposal.jobName,
+      projectName: extractProjectName(card.title),
+      isRework: detectReworkLoop(card.title),
       groupConfidence: proposal.confidence,
       groupSource: proposal.source,
       matchedKeyword: proposal.matchedKeyword,
@@ -146,7 +151,7 @@ export function classifyCards(cards: readonly ClassifiableCard[], rules: Learned
   return { cards: classified, buckets: buildBuckets(classified) };
 }
 
-function buildBuckets(cards: readonly CardClassification[]): ClassifyBucket[] {
+export function buildBuckets(cards: readonly CardClassification[]): ClassifyBucket[] {
   const map = new Map<string, ClassifyBucket>();
   for (const card of cards) {
     const current = map.get(card.groupName);

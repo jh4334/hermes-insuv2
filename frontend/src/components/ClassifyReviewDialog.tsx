@@ -16,6 +16,7 @@ export type BucketAssignment = {
   readonly task: PreviewTaskInput;
   readonly groupName: string;
   readonly jobName: string | null;
+  readonly projectName: string | null;
   readonly stage: string | null;
 };
 
@@ -30,12 +31,14 @@ type ReviewBucket = {
 const SOURCE_LABEL: Record<GroupSource, string> = {
   memory: '학습 규칙',
   cluster: '자동 묶음',
+  llm: 'LLM 제안',
   unclassified: '미분류',
 };
 
 const SOURCE_TONE: Record<GroupSource, string> = {
   memory: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   cluster: 'border-sky-200 bg-sky-50 text-sky-700',
+  llm: 'border-violet-200 bg-violet-50 text-violet-700',
   unclassified: 'border-border bg-surface text-muted-foreground',
 };
 
@@ -122,7 +125,13 @@ export function ClassifyReviewDialog({
         const task = tasks[index];
         if (!task) continue;
         const card = classification.cards[index];
-        assignments.push({ task, groupName: name, jobName: bucket.jobName, stage: card?.stage ?? task.category ?? null });
+        assignments.push({
+          task,
+          groupName: name,
+          jobName: bucket.jobName,
+          projectName: card?.projectName ?? null,
+          stage: card?.stage ?? task.category ?? null,
+        });
       }
     }
     onConfirm(assignments);
@@ -198,6 +207,8 @@ export function ClassifyReviewDialog({
                       <li key={index} className="flex items-center gap-2 text-xs text-foreground">
                         <span className="inline-flex w-16 shrink-0 justify-center rounded-full border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{card?.stage ?? '단계미정'}</span>
                         <span className="truncate" title={task.title}>{task.title}</span>
+                        {card?.projectName ? <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">{card.projectName}</span> : null}
+                        {card?.isRework ? <span className="shrink-0 rounded-full border border-ember/40 bg-ember-soft px-1.5 py-0.5 text-[10px] font-semibold text-ember">보완↩</span> : null}
                         <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">{task.start_date}</span>
                         {cardMoveTargets.length > 0 ? (
                           <select
