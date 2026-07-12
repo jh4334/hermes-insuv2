@@ -124,7 +124,7 @@ export function buildBundleQuadrants(tasks: readonly Task[]): BundleQuadrant[] {
     current.taskCount += 1;
     addActiveMonths(current.months, task.start_date, task.end_date);
     const stage = normalizeWorkflowCardStage(task.category);
-    if (stage === '계획' || stage === '품의') current.planOrApprovalCount += 1;
+    if (stage === '계획' || stage === '심의·협의' || stage === '품의') current.planOrApprovalCount += 1;
     if (stage === '결과보고') current.resultCount += 1;
     if (!current.groupColor && task.group_color) current.groupColor = task.group_color;
     map.set(groupName, current);

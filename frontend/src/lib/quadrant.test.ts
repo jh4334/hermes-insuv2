@@ -178,3 +178,20 @@ describe('bundle quadrant board', () => {
     expect(quadrants[0].yPercent).toBeGreaterThan(50);
   });
 });
+
+describe('심의·협의 stage in quadrants', () => {
+  it('counts 심의·협의 cards toward the plan/approval axis like 계획 and 품의', () => {
+    const base = {
+      description: null, end_date: null, priority: 'normal' as const, source_doc: null,
+      owner: null, successor_memo: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    };
+    const committee = buildBundleQuadrants([
+      { ...base, id: 'c1', title: '위원회 개최', start_date: '2026-03-01', category: '심의·협의', group_name: '급식', group_color: '#059669' },
+    ]);
+    const planned = buildBundleQuadrants([
+      { ...base, id: 'p1', title: '계획 수립', start_date: '2026-03-01', category: '계획', group_name: '급식', group_color: '#059669' },
+    ]);
+    expect(committee[0].yPercent).toBe(planned[0].yPercent);
+    expect(committee[0].xPercent).toBe(planned[0].xPercent);
+  });
+});

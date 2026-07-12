@@ -309,6 +309,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
   const exportDate = typeof bundlePmiMemosOrExportedAt === 'string' ? bundlePmiMemosOrExportedAt : exportedAt;
   type HandoffGroup = {
     readonly name: string;
+    readonly jobName: string | null;
     readonly tasks: Task[];
   };
 
@@ -322,6 +323,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
   const handoffGroups: HandoffGroup[] = Array.from(groupMap.entries())
     .map(([name, groupedTasks]) => ({
       name,
+      jobName: groupedTasks.find((task) => task.job_name?.trim())?.job_name?.trim() ?? null,
       tasks: groupedTasks.slice().sort((a, b) => a.start_date.localeCompare(b.start_date) || a.title.localeCompare(b.title, 'ko')),
     }))
     .sort((a, b) => {
@@ -345,6 +347,22 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
     return `${lines.join('\n')}\n`;
   }
 
+  const jobBuckets = new Map<string, string[]>();
+  for (const group of handoffGroups) {
+    const jobKey = group.jobName ?? '업무 미지정';
+    jobBuckets.set(jobKey, [...(jobBuckets.get(jobKey) ?? []), group.name]);
+  }
+  const jobEntries = Array.from(jobBuckets.entries()).sort((a, b) => {
+    if (a[0] === '업무 미지정') return 1;
+    if (b[0] === '업무 미지정') return -1;
+    return a[0].localeCompare(b[0], 'ko');
+  });
+  lines.push('## 업무 구조', '');
+  for (const [jobName, groupNames] of jobEntries) {
+    lines.push(`- ${jobName}: ${groupNames.join(', ')}`);
+  }
+  lines.push('');
+
   for (const group of handoffGroups) {
     const firstDate = group.tasks[0].start_date;
     const lastDate = group.tasks[group.tasks.length - 1].start_date;
@@ -354,6 +372,7 @@ export function buildSuccessorHandoffMarkdown(tasks: Task[], memos: Memo[], bund
     lines.push(
       `## ${group.name} Plus/Minus 메모`,
       '',
+      ...(group.jobName ? [`- 소속 업무: ${group.jobName}`] : []),
       `- 기간: ${period}`,
       `- 진행 요약: 완료 ${completedCount}건 / 진행 ${inProgressCount}건`,
       '',

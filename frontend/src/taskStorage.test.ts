@@ -150,7 +150,7 @@ describe('successor handoff markdown', () => {
 
     expect(markdown).toContain('# 업무묶음 Plus/Minus 정리');
     expect(markdown).toContain('원본 PDF 파일이나 원문 추출 텍스트는 포함하지 않습니다');
-    expect(markdown.match(/^## /gm)).toHaveLength(2);
+    expect(markdown.match(/^## /gm)).toHaveLength(3); // 업무 구조 개요 + 그룹 2개
     expect(markdown).toContain('## 안전 Plus/Minus 메모');
     expect(markdown).toContain('- 기간: 2026-05-11 ~ 2026-06-01');
     expect(markdown).toContain('- 진행 요약: 완료 1건 / 진행 1건');
@@ -195,5 +195,36 @@ describe('learned rules in local backup', () => {
     const parsed = parseLocalBackupText(JSON.stringify(withoutRules));
     if (!parsed.ok) throw new Error(parsed.message);
     expect(parsed.snapshot.learnedRules).toEqual([]);
+  });
+});
+
+describe('job hierarchy in the handoff markdown', () => {
+  it('adds an 업무 구조 overview and per-group 소속 업무 lines', () => {
+    const unifiedTask: Task = {
+      id: 'job-1',
+      title: '통일교육주간 운영 계획',
+      description: null,
+      start_date: '2026-05-11',
+      end_date: null,
+      category: '계획',
+      job_name: '계기교육',
+      group_name: '통일',
+      group_color: '#2563eb',
+      priority: 'normal',
+      source_doc: 'DOC-1',
+      owner: null,
+      successor_memo: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    };
+    const strayTask: Task = { ...unifiedTask, id: 'job-2', title: '독서 골든벨 운영', job_name: null, group_name: '독서교육', start_date: '2026-06-01' };
+
+    const markdown = buildSuccessorHandoffMarkdown([unifiedTask, strayTask], [], '2026-06-30T00:00:00.000Z');
+
+    expect(markdown).toContain('## 업무 구조');
+    expect(markdown).toContain('- 계기교육: 통일');
+    expect(markdown).toContain('- 업무 미지정: 독서교육');
+    expect(markdown.indexOf('- 계기교육: 통일')).toBeLessThan(markdown.indexOf('- 업무 미지정: 독서교육'));
+    expect(markdown).toContain('- 소속 업무: 계기교육');
   });
 });
