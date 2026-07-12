@@ -416,6 +416,12 @@ export function App() {
 }
 
 function PersonaOnboarding({ onPick }: { onPick: (mode: PersonaMode) => void }) {
+  const firstOptionRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    // 첫 진입 모달이므로 열릴 때 첫 선택지로 포커스를 옮겨 키보드/스크린리더
+    // 사용자가 바로 제목·선택지를 인지하고 조작할 수 있게 한다.
+    firstOptionRef.current?.focus();
+  }, []);
   return (
     <div role="dialog" aria-modal="true" aria-label="시작 모드 선택" className="fixed inset-0 z-[60] flex items-center justify-center bg-background/95 p-6 backdrop-blur-sm">
       <div className="w-full max-w-2xl border border-border bg-surface p-8 shadow-2xl">
@@ -425,13 +431,14 @@ function PersonaOnboarding({ onPick }: { onPick: (mode: PersonaMode) => void }) 
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">공문을 카드로 뽑아 업무 &gt; 세부업무 &gt; 단계 흐름으로 정리합니다. 지금 어느 쪽인가요? (나중에 사이드바에서 바꿀 수 있어요)</p>
         <div className="mt-6 grid gap-3 md:grid-cols-2">
-          {(['giver', 'receiver'] as const).map((mode) => (
+          {(['giver', 'receiver'] as const).map((mode, index) => (
             <button
               key={mode}
+              ref={index === 0 ? firstOptionRef : undefined}
               type="button"
               onClick={() => onPick(mode)}
               aria-label={`${PERSONA_COPY[mode].label} 모드로 시작`}
-              className="border border-border bg-background p-5 text-left transition-colors hover:border-ember focus:border-ember focus:outline-none"
+              className="border border-border bg-background p-5 text-left transition-colors hover:border-ember focus:border-ember focus:outline-none focus-visible:ring-2 focus-visible:ring-ember"
             >
               <p className="font-mono text-[11px] uppercase tracking-widest text-ember">{PERSONA_COPY[mode].label}</p>
               <p className="mt-1 font-display text-lg font-bold">{PERSONA_COPY[mode].toggleLabel}</p>

@@ -106,6 +106,11 @@ describe('two-track persona onboarding', () => {
     render(<App />);
     expect(screen.queryByRole('dialog', { name: /시작 모드 선택/i })).not.toBeInTheDocument();
   });
+
+  it('moves focus to the first option when onboarding opens (keyboard/screen-reader entry)', () => {
+    render(<App />);
+    expect(screen.getByRole('button', { name: /인계자 모드로 시작/i })).toHaveFocus();
+  });
 });
 
 describe('structure view integration', () => {
